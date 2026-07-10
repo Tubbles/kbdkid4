@@ -1,0 +1,10 @@
+{
+  "branches": [
+    {
+      "dir": "main",
+      "ref": "main"
+    }
+  ],
+  "removed": [],
+  "defaultBranch": "main"
+}

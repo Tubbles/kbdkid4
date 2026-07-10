@@ -1,0 +1,109 @@
+{
+  "id": "kbdkid4",
+  "name": "kbdkid4",
+  "source": ".",
+  "files": [
+    {
+      "path": "assembly/kbdkid4_v1_BOM_Std.csv",
+      "size": 1286,
+      "category": "bom"
+    },
+    {
+      "path": "assembly/kbdkid4_v1_PnP_Std_BOT.csv",
+      "size": 7287,
+      "category": "pnp"
+    },
+    {
+      "path": "assembly/kbdkid4_v1_PnP_Std_TOP.csv",
+      "size": 7053,
+      "category": "pnp"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_COPPER-BOTTOM.gbr",
+      "size": 43199,
+      "category": "gerber"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_COPPER-IN1.gbr",
+      "size": 13637,
+      "category": "gerber"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_COPPER-IN2.gbr",
+      "size": 608593,
+      "category": "gerber"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_COPPER-TOP.gbr",
+      "size": 44689,
+      "category": "gerber"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_DRILLS-NPTH.drl",
+      "size": 5125,
+      "category": "drill"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_DRILLS-PTH.drl",
+      "size": 3743,
+      "category": "drill"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_OUTLINES.gbr",
+      "size": 2216,
+      "category": "gerber"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_SILKSCREEN-BOTTOM.gbr",
+      "size": 42506,
+      "category": "gerber"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_SILKSCREEN-TOP.gbr",
+      "size": 42353,
+      "category": "gerber"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_SOLDERMASK-BOTTOM.gbr",
+      "size": 21872,
+      "category": "gerber"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_SOLDERMASK-TOP.gbr",
+      "size": 21728,
+      "category": "gerber"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_SOLDERPASTE-BOTTOM.gbr",
+      "size": 4429,
+      "category": "gerber"
+    },
+    {
+      "path": "gerber/kbdkid4_v1_SOLDERPASTE-TOP.gbr",
+      "size": 4448,
+      "category": "gerber"
+    },
+    {
+      "path": "kbdkid4_v1_Assembly.pdf",
+      "size": 2090667,
+      "category": "pdf"
+    },
+    {
+      "path": "kbdkid4_v1_Schematic.pdf",
+      "size": 128072,
+      "category": "pdf"
+    },
+    {
+      "path": "kbdkid4_v1.lppz",
+      "size": 2817961,
+      "category": "archive"
+    },
+    {
+      "path": "kbdkid4_v1.zip",
+      "size": 190723,
+      "category": "archive"
+    }
+  ],
+  "zip": "kbdkid4.zip",
+  "generatedAt": "2026-07-10T12:34:59.032Z"
+}
