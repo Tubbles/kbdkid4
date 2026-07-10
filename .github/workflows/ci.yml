@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  outputs:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: librepcb-ci-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Tubbles/librepcb-ci@v1
+        with:
+          pages: true
+          checks-fatal: false

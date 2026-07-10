@@ -2,7 +2,13 @@
  (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f (name "Std")
   (description "Standard assembly")
  )
- (netclass 648be8f6-255a-438f-aa66-6846a4e5db48 (name "default"))
+ (netclass 648be8f6-255a-438f-aa66-6846a4e5db48 (name "default")
+  (default_trace_width inherit)
+  (default_via_drill_diameter inherit)
+  (min_copper_copper_clearance 0.0)
+  (min_copper_width 0.0)
+  (min_via_drill_diameter 0.0)
+ )
  (net 01aa1490-c48c-4ce8-ba6a-132599822a67 (auto false) (name "C3")
   (netclass 648be8f6-255a-438f-aa66-6846a4e5db48)
  )
@@ -374,7 +380,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP12") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 73121b2c-c372-4d47-b36c-8c7f87595717))
@@ -385,7 +391,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP9") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 01aa1490-c48c-4ce8-ba6a-132599822a67))
@@ -580,7 +586,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP40") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 09d654d0-a0d1-469f-8935-2249ccf3d852))
@@ -591,7 +597,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP7") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 47844ddf-fefb-42bb-b28b-f3cca7f96e31))
@@ -635,7 +641,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP47") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net f122abcf-e9d2-4828-a243-926eadbeeb99))
@@ -686,7 +692,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP6") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net a3cd6941-26cb-42fa-9f82-9411b2e0b3ae))
@@ -697,7 +703,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP36") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net f01eda0f-dcdf-4631-ae2e-dcd36825f0e2))
@@ -742,7 +748,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP25") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 39a2e8fb-d7df-4460-99d5-89c650d52d66))
@@ -753,7 +759,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP2") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 62f4bd30-aad1-4fff-8fb3-d576ceebfb56))
@@ -797,7 +803,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP51") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 32438fd1-ae1c-4d66-94d8-8bb0169b39b6))
@@ -819,7 +825,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP31") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net a3cd6941-26cb-42fa-9f82-9411b2e0b3ae))
@@ -830,7 +836,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP22") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net f01eda0f-dcdf-4631-ae2e-dcd36825f0e2))
@@ -886,7 +892,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP44") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 4676e1ab-cde8-4604-bc17-6e4380109f97))
@@ -908,7 +914,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP11") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 1f355dbb-3d95-441e-9e7e-7b29d6a7bfb2))
@@ -919,7 +925,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP29") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 73121b2c-c372-4d47-b36c-8c7f87595717))
@@ -941,7 +947,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP48") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 32438fd1-ae1c-4d66-94d8-8bb0169b39b6))
@@ -952,7 +958,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP5") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 39a2e8fb-d7df-4460-99d5-89c650d52d66))
@@ -974,7 +980,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP50") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 32438fd1-ae1c-4d66-94d8-8bb0169b39b6))
@@ -1007,7 +1013,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP41") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 05b9650d-d7e7-4f2c-968b-d16a3b6b5d7a))
@@ -1036,7 +1042,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP46") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 62f4bd30-aad1-4fff-8fb3-d576ceebfb56))
@@ -1058,7 +1064,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP1") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 05b9650d-d7e7-4f2c-968b-d16a3b6b5d7a))
@@ -1102,7 +1108,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP10") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net e89a7f24-6e6f-4461-97cc-120cb41d0dbd))
@@ -1113,7 +1119,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP16") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 32438fd1-ae1c-4d66-94d8-8bb0169b39b6))
@@ -1183,7 +1189,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP26") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net aed1457d-ec21-45dc-98f3-35e39cea1808))
@@ -1194,7 +1200,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP3") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net f01eda0f-dcdf-4631-ae2e-dcd36825f0e2))
@@ -1216,7 +1222,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP38") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 32438fd1-ae1c-4d66-94d8-8bb0169b39b6))
@@ -1245,7 +1251,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP39") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 7cec255d-4d01-4fe0-91ba-00d32b42f01d))
@@ -1289,7 +1295,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP45") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 32438fd1-ae1c-4d66-94d8-8bb0169b39b6))
@@ -1322,7 +1328,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP24") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net ed40ff25-53ec-4f60-bc76-7c95988c2c28))
@@ -1408,7 +1414,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP52") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 32438fd1-ae1c-4d66-94d8-8bb0169b39b6))
@@ -1441,7 +1447,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP32") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 1f355dbb-3d95-441e-9e7e-7b29d6a7bfb2))
@@ -1496,7 +1502,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP34") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net a406d11c-d52e-4dcd-ace8-7c6e2fe38d5d))
@@ -1540,7 +1546,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP33") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net e89a7f24-6e6f-4461-97cc-120cb41d0dbd))
@@ -1562,7 +1568,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP42") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 0f93baed-9bcc-4705-81a7-fd95cde02701))
@@ -1617,7 +1623,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP49") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net edc91a26-e992-4149-aab8-4c98a9b311eb))
@@ -1639,7 +1645,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP19") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 0f93baed-9bcc-4705-81a7-fd95cde02701))
@@ -1708,7 +1714,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP20") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 32438fd1-ae1c-4d66-94d8-8bb0169b39b6))
@@ -1775,7 +1781,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP23") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 05b9650d-d7e7-4f2c-968b-d16a3b6b5d7a))
@@ -1804,7 +1810,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP43") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 01aa1490-c48c-4ce8-ba6a-132599822a67))
@@ -1826,7 +1832,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP4") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 7cec255d-4d01-4fe0-91ba-00d32b42f01d))
@@ -1837,7 +1843,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP28") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net f01eda0f-dcdf-4631-ae2e-dcd36825f0e2))
@@ -1870,7 +1876,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP13") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net a406d11c-d52e-4dcd-ace8-7c6e2fe38d5d))
@@ -1959,7 +1965,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP53") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 32438fd1-ae1c-4d66-94d8-8bb0169b39b6))
@@ -1996,7 +2002,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP27") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 62f4bd30-aad1-4fff-8fb3-d576ceebfb56))
@@ -2029,8 +2035,10 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP14") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
+  )
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net aed1457d-ec21-45dc-98f3-35e39cea1808))
   (signal d94c81f3-85ce-4a42-a816-9236049ad6b8 (net 0fc245fd-4cd2-40de-a25f-d23899c91304))
@@ -2040,7 +2048,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP17") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net b8768d71-a23d-4c70-af03-a808a953aa89))
@@ -2102,7 +2110,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP18") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 0f93baed-9bcc-4705-81a7-fd95cde02701))
@@ -2179,7 +2187,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP35") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 0f93baed-9bcc-4705-81a7-fd95cde02701))
@@ -2212,7 +2220,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP21") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 62f4bd30-aad1-4fff-8fb3-d576ceebfb56))
@@ -2234,7 +2242,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP15") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 4605961b-84df-4105-af5e-fa87afa3ed1f))
@@ -2245,7 +2253,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP54") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 32438fd1-ae1c-4d66-94d8-8bb0169b39b6))
@@ -2278,7 +2286,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP30") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 05b9650d-d7e7-4f2c-968b-d16a3b6b5d7a))
@@ -2289,7 +2297,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP8") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net ed40ff25-53ec-4f60-bc76-7c95988c2c28))
@@ -2311,7 +2319,7 @@
   (lib_variant 5a4ba3e9-b437-45d3-a2c9-fa3ccc737264)
   (name "JP37") (value "")
   (lock_assembly false)
-  (device bf9e51c9-a31a-4b44-a487-a97c58593626
+  (device 477afff9-a1f8-4198-88c2-4f166a2f8108
    (variant a22a9f7c-97d4-48f0-863a-745c0ff26a6f)
   )
   (signal 7e8fab60-576e-4abc-b739-784c7b599b1b (net 47844ddf-fefb-42bb-b28b-f3cca7f96e31))
