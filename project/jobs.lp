@@ -1,4 +1,10 @@
 (librepcb_jobs
+ (job dfaf1cb4-a033-430d-a16f-ffa28a439fd6 (name "STEP Model")
+  (type 3d_model)
+  (board default)
+  (variant default)
+  (output "{{PROJECT}}_{{VERSION}}.step")
+ )
  (job ef5c7f9a-b65e-4f27-a53a-dbe034b05fb4 (name "Schematic PDF")
   (type graphics) (title "{{PROJECT}} - {{VERSION}}")
   (content (type schematic) (title "Schematic")
