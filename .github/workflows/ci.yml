@@ -20,3 +20,35 @@ jobs:
         with:
           pages: true
           checks-fatal: false
+
+  tray:
+    runs-on: ubuntu-latest
+    needs: outputs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: librepcb-ci-outputs
+          path: librepcb-ci-output
+      - name: Build headless FreeCAD image
+        run: docker build -t freecad-headless -f scripts/freecad.Dockerfile scripts
+      - name: Export tray STL
+        run: |
+          shopt -s globstar nullglob
+          step_files=(librepcb-ci-output/**/*.step)
+          if [ ${#step_files[@]} -eq 0 ]; then
+            echo "::error::no .step file among the generated outputs"
+            exit 1
+          fi
+          mkdir -p tray
+          for step_file in "${step_files[@]}"; do
+            stl_file="tray/$(basename "${step_file%.step}")_Tray.stl"
+            docker run --rm -v "$PWD":/work -w /work freecad-headless \
+              freecadcmd scripts/export_tray.py --pass "$step_file" "$stl_file"
+          done
+      - name: Upload tray STL
+        uses: actions/upload-artifact@v4
+        with:
+          name: tray-stl
+          path: tray/
+          if-no-files-found: error
