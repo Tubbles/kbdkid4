@@ -85,17 +85,17 @@
     },
     {
       "path": "kbdkid4_v1_Assembly.pdf",
-      "size": 2090667,
+      "size": 2090620,
       "category": "pdf"
     },
     {
       "path": "kbdkid4_v1_Schematic.pdf",
-      "size": 128250,
+      "size": 128324,
       "category": "pdf"
     },
     {
       "path": "kbdkid4_v1.lppz",
-      "size": 4709197,
+      "size": 4709949,
       "category": "archive"
     },
     {
@@ -110,5 +110,5 @@
     }
   ],
   "zip": "kbdkid4.zip",
-  "generatedAt": "2026-07-22T10:10:32.342Z"
+  "generatedAt": "2026-07-22T10:23:12.639Z"
 }
