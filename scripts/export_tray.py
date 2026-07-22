@@ -27,19 +27,17 @@ protrude the furthest, so the bare(r) side rests on the tray floor.
 Pass the word "flip" to override. The tray is positioned in board
 coordinates: the cavity floor touches the board's resting face.
 
-All vertical corners of the outer shell share one radius: gap + wall,
-capped by what the shortest outline step can geometrically fit (the
-chosen value is printed). To get that, the board outline (whose
-corners come pre-rounded from
-the PCB design) is rebuilt as a sharp-corner polygon, offset with
-sharp joins, extruded, and the shell's vertical edges are filleted
-before the cavity is cut. The cavity itself keeps the plain offset
-geometry so the board clearance stays constant everywhere. The one
-exception: where the outline is concave the offset trims the cavity
-wall to a sharp corner, and since the outer shell got a cove fillet
-there, a sharp inner side would locally widen the wall. Those corners
-are rounded with radius corner radius plus wall, concentric with the
-cove, keeping the wall width constant through the corner.
+All corners carry matched radii so the wall keeps its nominal width
+everywhere: the outer shell gets one uniform radius (gap + wall,
+capped by what the shortest outline step can geometrically fit; the
+chosen value is printed) and the cavity gets the concentric
+counterparts, outer radius minus wall at convex corners and outer
+radius plus wall at concave ones. To make that possible, both walls
+are built from the outline rebuilt as a sharp-corner polygon (the
+corner rounds the outline carries from the PCB design are dropped),
+offset with sharp joins, extruded, and filleted. The cavity therefore
+does not follow the board's own corner rounds; its corner clearance
+only ever grows relative to the nominal gap, never shrinks.
 """
 
 import math
@@ -288,18 +286,14 @@ def pick_resting_face(outline_face_pair, open_toward_positive_axis):
     return high_face, axis.negative()
 
 
-def grow(wire, distance, sharp=False):
-    """Offset a closed wire outward by `distance`, regardless of the
-    wire's orientation (makeOffset2D's sign follows orientation).
-
-    With sharp=True convex corners are extended to their intersection
-    (join type 2) instead of being arced over.
-    """
-    join_type = 2 if sharp else 0
+def grow(wire, distance):
+    """Offset a closed wire outward by `distance` with sharp corners
+    (join type 2, corners extended to their intersection), regardless
+    of the wire's orientation (makeOffset2D's sign follows it)."""
     original_area = Part.Face(wire).Area
-    grown = wire.makeOffset2D(distance, join_type)
+    grown = wire.makeOffset2D(distance, 2)
     if Part.Face(grown).Area < original_area:
-        grown = wire.makeOffset2D(-distance, join_type)
+        grown = wire.makeOffset2D(-distance, 2)
     if Part.Face(grown).Area <= original_area:
         raise SystemExit(f"error: offsetting the outline by {distance} mm failed")
     return grown
@@ -365,51 +359,76 @@ def sharpen_outline(outline_wire, normal):
     return Part.makePolygon(corner_points + [corner_points[0]])
 
 
-def faces_meet_smoothly(face_a, face_b, edge):
-    """Whether two faces join tangentially along an edge (e.g. a wall
-    plane running into a corner-round cylinder)."""
-    point = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
-    normals = []
-    for face in (face_a, face_b):
-        u, v = face.Surface.parameter(point)
-        normals.append(face.normalAt(u, v))
-    return abs(normals[0].dot(normals[1])) > 0.985
+def is_vertical_line_edge(edge, up):
+    if not isinstance(edge.Curve, Part.Line):
+        return False
+    direction = edge.valueAt(edge.LastParameter).sub(
+        edge.valueAt(edge.FirstParameter)
+    )
+    if direction.Length < 1e-9:
+        return False
+    return abs(direction.normalize().dot(up)) > 0.999
 
 
-def fillet_sharp_cavity_corners(tray, up, radius):
-    """Round the cavity's sharp vertical corners, returning the new
-    solid and how many corners were rounded.
+def vertex_key(point):
+    return (round(point.x, 4), round(point.y, 4), round(point.z, 4))
 
-    Offsetting the outline trims the cavity wall to a sharp corner
-    wherever the outline is concave. Since the outer shell gets a cove
-    fillet at those spots, a sharp inner side would locally widen the
-    wall well past its nominal thickness; a fillet of outer radius plus
-    wall thickness is concentric with the cove and keeps the wall
-    constant. After the shell fillets these sharp corners are the only
-    vertical line edges left with a real dihedral angle, which is how
-    they are found; tangent seam edges must be skipped, OCC cannot
-    fillet those.
-    """
-    sharp_edges = []
-    for edge in tray.Edges:
-        if not isinstance(edge.Curve, Part.Line):
+
+def polygon_corner_convexity(polygon_wire, up):
+    """Map each polygon vertex position to whether its corner is convex
+    (material angle below 180 degrees), keyed by vertex_key()."""
+    points = [vertex.Point for vertex in polygon_wire.OrderedVertexes]
+    count = len(points)
+    directions = [
+        points[(index + 1) % count].sub(points[index]).normalize()
+        for index in range(count)
+    ]
+    turns = []
+    for index in range(count):
+        cross = directions[index - 1].cross(directions[index]).dot(up)
+        dot = directions[index - 1].dot(directions[index])
+        turns.append(math.atan2(cross, dot))
+    orientation = 1.0 if sum(turns) > 0 else -1.0
+    return {
+        vertex_key(points[index]): turns[index] * orientation > 0
+        for index in range(count)
+    }
+
+
+def corner_edges(solid, up, convexity_by_vertex, want_convex):
+    """The solid's vertical edges standing on polygon corners of the
+    requested convexity. Seam edges from earlier fillets stand on no
+    polygon corner and are skipped by the position match."""
+    selected = []
+    for edge in solid.Edges:
+        if not is_vertical_line_edge(edge, up):
             continue
-        direction = edge.valueAt(edge.LastParameter).sub(
-            edge.valueAt(edge.FirstParameter)
-        )
-        if direction.Length < 1e-9:
-            continue
-        if abs(direction.normalize().dot(up)) < 0.999:
-            continue
-        adjacent_faces = tray.ancestorsOfType(edge, Part.Face)
-        if len(adjacent_faces) != 2:
-            continue
-        if faces_meet_smoothly(adjacent_faces[0], adjacent_faces[1], edge):
-            continue
-        sharp_edges.append(edge)
-    if not sharp_edges:
-        return tray, 0
-    return tray.makeFillet(radius, sharp_edges), len(sharp_edges)
+        for parameter in (edge.FirstParameter, edge.LastParameter):
+            key = vertex_key(edge.valueAt(parameter))
+            if key in convexity_by_vertex:
+                if convexity_by_vertex[key] == want_convex:
+                    selected.append(edge)
+                break
+    return selected
+
+
+def fillet_cavity_corners(prism, polygon, up, corner_radius, wall):
+    """Round the cavity prism's corners concentric with the outer
+    shell's fillets: outer radius minus wall on convex corners, outer
+    radius plus wall on concave ones. Both fillet centers land on the
+    same point for any corner angle, so the wall keeps its nominal
+    width through every corner."""
+    convexity = polygon_corner_convexity(polygon, up)
+    result = prism
+    convex_radius = corner_radius - wall
+    if convex_radius > 0.01:
+        edges = corner_edges(result, up, convexity, True)
+        if edges:
+            result = result.makeFillet(convex_radius, edges)
+    edges = corner_edges(result, up, convexity, False)
+    if edges:
+        result = result.makeFillet(corner_radius + wall, edges)
+    return result
 
 
 def max_uniform_corner_radius(polygon_wire):
@@ -447,31 +466,25 @@ def max_uniform_corner_radius(polygon_wire):
 def fillet_vertical_edges(solid, up, radius):
     """Fillet every straight vertical edge of a prism, giving all its
     corners the same radius."""
-    vertical_edges = []
-    for edge in solid.Edges:
-        if not isinstance(edge.Curve, Part.Line):
-            continue
-        direction = edge.valueAt(edge.LastParameter).sub(
-            edge.valueAt(edge.FirstParameter)
-        )
-        if direction.Length < 1e-9:
-            continue
-        if abs(direction.normalize().dot(up)) > 0.999:
-            vertical_edges.append(edge)
+    vertical_edges = [
+        edge for edge in solid.Edges if is_vertical_line_edge(edge, up)
+    ]
     if not vertical_edges:
         raise SystemExit("error: no vertical corner edges found to fillet")
     return solid.makeFillet(radius, vertical_edges)
 
 
 def build_tray(outline_wire, up, gap, wall, floor, height):
-    # The cavity follows the board outline exactly (constant clearance,
-    # corner rounds included). The outer shell is rebuilt sharp and then
-    # filleted so every visible corner shares one radius: gap + wall,
-    # which at a 90 degree corner passes through the same point a plain
-    # offset arc would, capped by what the shortest outline step can
-    # geometrically fit.
-    cavity_wire = grow(outline_wire, gap)
-    outer_wire = grow(sharpen_outline(outline_wire, up), gap + wall, sharp=True)
+    # Both walls are built from the sharpened outline so every corner
+    # can carry a chosen radius: the outer shell gets one uniform
+    # radius (capped by what the shortest outline step can fit) and the
+    # cavity gets the concentric counterparts, so the wall keeps its
+    # nominal width through every corner. The cavity therefore does not
+    # follow the board's own corner rounds; corner clearance only ever
+    # grows relative to the nominal gap, never shrinks.
+    sharp_outline = sharpen_outline(outline_wire, up)
+    cavity_polygon = grow(sharp_outline, gap)
+    outer_wire = grow(sharp_outline, gap + wall)
     corner_radius = min(
         gap + wall,
         math.floor(95.0 * max_uniform_corner_radius(outer_wire)) / 100.0,
@@ -481,32 +494,24 @@ def build_tray(outline_wire, up, gap, wall, floor, height):
     outer_face.translate(up * -floor)
     shell = fillet_vertical_edges(outer_face.extrude(up * height), up, corner_radius)
 
-    cavity_face = Part.Face(cavity_wire)
-    cavity = cavity_face.extrude(up * (height - floor + 1.0))
-
-    tray = shell.cut(cavity)
-    validate_tray(tray, shell, cavity_wire, floor, height)
-
-    volume_before_rounding = tray.Volume
-    tray, rounded_cavity_corners = fillet_sharp_cavity_corners(
-        tray, up, corner_radius + wall
+    cavity_prism = Part.Face(cavity_polygon).extrude(up * (height - floor + 1.0))
+    cavity_prism = fillet_cavity_corners(
+        cavity_prism, cavity_polygon, up, corner_radius, wall
     )
-    if not tray.isValid() or len(tray.Solids) != 1:
-        raise SystemExit("error: rounding the cavity corners broke the solid")
-    removed_volume = volume_before_rounding - tray.Volume
-    if removed_volume < 0 or removed_volume > 0.02 * volume_before_rounding:
-        raise SystemExit(
-            f"error: cavity corner rounding removed {removed_volume:.1f} mm3, "
-            "outside the plausible range; geometry is off"
-        )
-    return tray, corner_radius, rounded_cavity_corners
+
+    tray = shell.cut(cavity_prism)
+    validate_tray(tray, shell, cavity_prism, floor, height)
+    return tray, corner_radius
 
 
-def validate_tray(tray, shell, cavity_wire, floor, height):
+def validate_tray(tray, shell, cavity_prism, floor, height):
     if not tray.isValid() or len(tray.Solids) != 1:
         raise SystemExit("error: tray boolean cut produced an invalid solid")
+    # The cavity prism is a straight extrusion, so the part of it that
+    # overlaps the shell scales linearly with height.
+    cavity_height = height - floor + 1.0
     expected_volume = (
-        shell.Volume - Part.Face(cavity_wire).Area * (height - floor)
+        shell.Volume - cavity_prism.Volume * (height - floor) / cavity_height
     )
     if abs(tray.Volume - expected_volume) > 0.001 * expected_volume:
         raise SystemExit(
@@ -547,7 +552,7 @@ def main():
         outline_face_pair, open_toward_positive_axis
     )
 
-    tray, corner_radius, rounded_cavity_corners = build_tray(
+    tray, corner_radius = build_tray(
         resting_face.OuterWire,
         up,
         arguments.gap,
@@ -567,7 +572,7 @@ def main():
           f"floor {arguments.floor} mm, height {arguments.height} mm, "
           f"volume {tray.Volume / 1000.0:.2f} cm3")
     print(f"corners:    uniform {corner_radius:.2f} mm radius on the outer shell, "
-          f"{rounded_cavity_corners} sharp cavity corners rounded to "
+          f"cavity concentric at {max(corner_radius - arguments.wall, 0.0):.2f} / "
           f"{corner_radius + arguments.wall:.2f} mm")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
