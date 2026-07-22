@@ -27,17 +27,21 @@ protrude the furthest, so the bare(r) side rests on the tray floor.
 Pass the word "flip" to override. The tray is positioned in board
 coordinates: the cavity floor touches the board's resting face.
 
-All corners carry matched radii so the wall keeps its nominal width
-everywhere: the outer shell gets one uniform radius (gap + wall,
-capped by what the shortest outline step can geometrically fit; the
-chosen value is printed) and the cavity gets the concentric
-counterparts, outer radius minus wall at convex corners and outer
-radius plus wall at concave ones. To make that possible, both walls
-are built from the outline rebuilt as a sharp-corner polygon (the
-corner rounds the outline carries from the PCB design are dropped),
-offset with sharp joins, extruded, and filleted. The cavity therefore
-does not follow the board's own corner rounds; its corner clearance
-only ever grows relative to the nominal gap, never shrinks.
+Every corner, convex or concave, bends with the same pair of
+concentric radii: the corner radius on the outside of the bend and
+the corner radius minus the wall thickness on the inside. All corners
+therefore look alike and the wall keeps its nominal width through
+them. The corner radius is gap + wall, capped by what the shortest
+outline step can geometrically fit (the chosen value is printed). To
+make that possible, both walls are built from the outline rebuilt as
+a sharp-corner polygon (the corner rounds the outline carries from
+the PCB design are dropped), offset with sharp joins, extruded, and
+filleted. The cavity therefore does not follow the board's own corner
+rounds; its corner clearance only ever grows relative to the nominal
+gap, never shrinks.
+
+The design values live in the constants right below this docstring;
+everything else derives from them.
 """
 
 import math
@@ -51,14 +55,27 @@ import Import
 import MeshPart
 import Part
 
+# Tray design parameters, all in mm. Overridable per run with key=value
+# command line words; the corner radii derive from gap and wall.
+DEFAULT_GAP_MM = 0.8  # clearance between PCB edge and cavity wall
+DEFAULT_WALL_MM = 0.4  # wall thickness (one nozzle width)
+DEFAULT_FLOOR_MM = 0.6  # floor thickness
+DEFAULT_HEIGHT_MM = 10.0  # total tray height including the floor
+
+# Implementation tuning, rarely worth touching.
+CORNER_FIT_SAFETY = 0.95  # margin on the largest corner radius that fits
+MINIMUM_FILLET_RADIUS_MM = 0.01  # below this a fillet is skipped as moot
+CAVITY_CUT_EXTRA_MM = 1.0  # cavity overshoot above the rim for a clean cut
+SHARPEN_MAX_CORNER_RADIUS_MM = 3.0  # outline arcs above this are not corners
+MESH_LINEAR_DEFLECTION_MM = 0.05
+MESH_ANGULAR_DEFLECTION_DEGREES = 15.0
+
 # LibrePCB names the board body "PCB" ("PCB1", "PCB2", ... for multiple
 # outlines); depending on the FreeCAD version the imported object carries
 # the product label ("PCB") or the instance label ("PCB:1").
 BOARD_LABEL_PATTERN = re.compile(r"^PCB\d*(:\d+)?$")
 BOARD_THICKNESS_RANGE_MM = (0.2, 5.0)
 PARTNER_FACE_AREA_TOLERANCE = 0.05
-MESH_LINEAR_DEFLECTION_MM = 0.05
-SHARPEN_MAX_CORNER_RADIUS_MM = 3.0
 
 
 def script_arguments(argv):
@@ -73,9 +90,10 @@ def script_arguments(argv):
     return argv[1:]
 
 
-USAGE = """\
+USAGE = f"""\
 usage: freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl>
-           [gap=0.8] [wall=0.4] [floor=0.6] [height=10.0] [flip]
+           [gap={DEFAULT_GAP_MM}] [wall={DEFAULT_WALL_MM}] \
+[floor={DEFAULT_FLOOR_MM}] [height={DEFAULT_HEIGHT_MM}] [flip]
 
   gap     clearance between PCB edge and cavity wall, mm
   wall    tray wall thickness, mm
@@ -89,10 +107,10 @@ class Arguments:
     def __init__(self):
         self.step_file = None
         self.stl_file = None
-        self.gap = 0.8
-        self.wall = 0.4
-        self.floor = 0.6
-        self.height = 10.0
+        self.gap = DEFAULT_GAP_MM
+        self.wall = DEFAULT_WALL_MM
+        self.floor = DEFAULT_FLOOR_MM
+        self.height = DEFAULT_HEIGHT_MM
         self.flip = False
 
 
@@ -412,22 +430,17 @@ def corner_edges(solid, up, convexity_by_vertex, want_convex):
     return selected
 
 
-def fillet_cavity_corners(prism, polygon, up, corner_radius, wall):
-    """Round the cavity prism's corners concentric with the outer
-    shell's fillets: outer radius minus wall on convex corners, outer
-    radius plus wall on concave ones. Both fillet centers land on the
-    same point for any corner angle, so the wall keeps its nominal
-    width through every corner."""
+def fillet_prism_corners(prism, polygon, up, convex_radius, concave_radius):
+    """Fillet a prism's vertical corner edges, with one radius for the
+    polygon's convex corners and another for its concave ones."""
     convexity = polygon_corner_convexity(polygon, up)
     result = prism
-    convex_radius = corner_radius - wall
-    if convex_radius > 0.01:
-        edges = corner_edges(result, up, convexity, True)
+    for want_convex, radius in ((True, convex_radius), (False, concave_radius)):
+        if radius < MINIMUM_FILLET_RADIUS_MM:
+            continue
+        edges = corner_edges(result, up, convexity, want_convex)
         if edges:
-            result = result.makeFillet(convex_radius, edges)
-    edges = corner_edges(result, up, convexity, False)
-    if edges:
-        result = result.makeFillet(corner_radius + wall, edges)
+            result = result.makeFillet(radius, edges)
     return result
 
 
@@ -463,40 +476,39 @@ def max_uniform_corner_radius(polygon_wire):
     return radius_limit
 
 
-def fillet_vertical_edges(solid, up, radius):
-    """Fillet every straight vertical edge of a prism, giving all its
-    corners the same radius."""
-    vertical_edges = [
-        edge for edge in solid.Edges if is_vertical_line_edge(edge, up)
-    ]
-    if not vertical_edges:
-        raise SystemExit("error: no vertical corner edges found to fillet")
-    return solid.makeFillet(radius, vertical_edges)
-
-
 def build_tray(outline_wire, up, gap, wall, floor, height):
     # Both walls are built from the sharpened outline so every corner
-    # can carry a chosen radius: the outer shell gets one uniform
-    # radius (capped by what the shortest outline step can fit) and the
-    # cavity gets the concentric counterparts, so the wall keeps its
-    # nominal width through every corner. The cavity therefore does not
-    # follow the board's own corner rounds; corner clearance only ever
-    # grows relative to the nominal gap, never shrinks.
+    # can carry a chosen radius. Each bend, convex or concave, gets the
+    # corner radius on its outside and corner radius minus wall on its
+    # inside; the two arcs are concentric for any corner angle, so all
+    # corners look alike and the wall keeps its nominal width through
+    # them. The cavity therefore does not follow the board's own corner
+    # rounds; corner clearance only ever grows relative to the nominal
+    # gap, never shrinks.
     sharp_outline = sharpen_outline(outline_wire, up)
     cavity_polygon = grow(sharp_outline, gap)
     outer_wire = grow(sharp_outline, gap + wall)
     corner_radius = min(
         gap + wall,
-        math.floor(95.0 * max_uniform_corner_radius(outer_wire)) / 100.0,
+        math.floor(100.0 * CORNER_FIT_SAFETY * max_uniform_corner_radius(outer_wire))
+        / 100.0,
     )
 
-    outer_face = Part.Face(outer_wire)
-    outer_face.translate(up * -floor)
-    shell = fillet_vertical_edges(outer_face.extrude(up * height), up, corner_radius)
+    outer_wire.translate(up * -floor)
+    shell = fillet_prism_corners(
+        Part.Face(outer_wire).extrude(up * height),
+        outer_wire,
+        up,
+        convex_radius=corner_radius,
+        concave_radius=corner_radius - wall,
+    )
 
-    cavity_prism = Part.Face(cavity_polygon).extrude(up * (height - floor + 1.0))
-    cavity_prism = fillet_cavity_corners(
-        cavity_prism, cavity_polygon, up, corner_radius, wall
+    cavity_prism = fillet_prism_corners(
+        Part.Face(cavity_polygon).extrude(up * (height - floor + CAVITY_CUT_EXTRA_MM)),
+        cavity_polygon,
+        up,
+        convex_radius=corner_radius - wall,
+        concave_radius=corner_radius,
     )
 
     tray = shell.cut(cavity_prism)
@@ -509,7 +521,7 @@ def validate_tray(tray, shell, cavity_prism, floor, height):
         raise SystemExit("error: tray boolean cut produced an invalid solid")
     # The cavity prism is a straight extrusion, so the part of it that
     # overlaps the shell scales linearly with height.
-    cavity_height = height - floor + 1.0
+    cavity_height = height - floor + CAVITY_CUT_EXTRA_MM
     expected_volume = (
         shell.Volume - cavity_prism.Volume * (height - floor) / cavity_height
     )
@@ -524,7 +536,7 @@ def export_stl(tray, stl_file):
     mesh = MeshPart.meshFromShape(
         Shape=tray,
         LinearDeflection=MESH_LINEAR_DEFLECTION_MM,
-        AngularDeflection=math.radians(15),
+        AngularDeflection=math.radians(MESH_ANGULAR_DEFLECTION_DEGREES),
         Relative=False,
     )
     mesh.write(stl_file)
@@ -571,9 +583,8 @@ def main():
     print(f"tray:       gap {arguments.gap} mm, wall {arguments.wall} mm, "
           f"floor {arguments.floor} mm, height {arguments.height} mm, "
           f"volume {tray.Volume / 1000.0:.2f} cm3")
-    print(f"corners:    uniform {corner_radius:.2f} mm radius on the outer shell, "
-          f"cavity concentric at {max(corner_radius - arguments.wall, 0.0):.2f} / "
-          f"{corner_radius + arguments.wall:.2f} mm")
+    print(f"corners:    every bend {max(corner_radius - arguments.wall, 0.0):.2f} mm "
+          f"inside / {corner_radius:.2f} mm outside, concentric")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
