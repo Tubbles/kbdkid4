@@ -49,6 +49,13 @@ rises from the tray floor, bored for an M2 heat-set insert. The bore's
 floor is the tray floor's top surface, so the floor thickness of
 material backs the insert.
 
+A ledge along the cavity wall, ledge_width wide and as tall as the
+standoffs, supports the board's perimeter: since the wall sits gap
+away from the board edge, the shelf reaches ledge_width minus gap
+under the board, and the board rests on ledge and standoffs together.
+The well inside the ledge continues the concentric corner treatment
+inward. Set ledge_width to 0 to build without a ledge.
+
 The design values live in the constants right below this docstring;
 everything else derives from them.
 """
@@ -73,6 +80,7 @@ DEFAULT_DEPTH_MM = 12.9  # cavity depth, floor top to rim (overall height = dept
 DEFAULT_STANDOFF_HEIGHT_MM = 8.0  # insert standoff height above the floor
 DEFAULT_STANDOFF_DIAMETER_MM = 5.8  # insert standoff outer diameter
 DEFAULT_STANDOFF_HOLE_DIAMETER_MM = 3.2  # bore for an M2 heat-set insert
+DEFAULT_LEDGE_WIDTH_MM = 1.0  # PCB support ledge from the cavity wall (0 disables)
 
 # The board's mounting drills, which the standoffs line up with.
 MOUNTING_HOLE_DIAMETER_MM = 2.4
@@ -112,7 +120,8 @@ usage: freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl>
 [floor={DEFAULT_FLOOR_MM}] [depth={DEFAULT_DEPTH_MM}] [flip]
            [standoff_height={DEFAULT_STANDOFF_HEIGHT_MM}] \
 [standoff_diameter={DEFAULT_STANDOFF_DIAMETER_MM}] \
-[standoff_hole_diameter={DEFAULT_STANDOFF_HOLE_DIAMETER_MM}]
+[standoff_hole_diameter={DEFAULT_STANDOFF_HOLE_DIAMETER_MM}] \
+[ledge_width={DEFAULT_LEDGE_WIDTH_MM}]
 
   gap     clearance between PCB edge and cavity wall, mm
   wall    tray wall thickness, mm
@@ -121,7 +130,9 @@ usage: freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl>
   flip    open the cavity toward the opposite side of the automatic choice
   standoff_height         insert standoff height above the floor, mm
   standoff_diameter       insert standoff outer diameter, mm
-  standoff_hole_diameter  bore for the heat-set insert, mm\
+  standoff_hole_diameter  bore for the heat-set insert, mm
+  ledge_width             PCB support ledge width from the cavity wall, mm;
+                          the ledge is standoff_height tall, 0 disables it\
 """
 
 
@@ -136,6 +147,7 @@ class Arguments:
         self.standoff_height = DEFAULT_STANDOFF_HEIGHT_MM
         self.standoff_diameter = DEFAULT_STANDOFF_DIAMETER_MM
         self.standoff_hole_diameter = DEFAULT_STANDOFF_HOLE_DIAMETER_MM
+        self.ledge_width = DEFAULT_LEDGE_WIDTH_MM
         self.flip = False
 
 
@@ -149,6 +161,7 @@ def parse_arguments(argument_list):
         "standoff_height",
         "standoff_diameter",
         "standoff_hole_diameter",
+        "ledge_width",
     )
     positionals = []
     for argument in argument_list:
@@ -337,17 +350,25 @@ def pick_resting_face(outline_face_pair, open_toward_positive_axis):
     return high_face, axis.negative()
 
 
-def grow(wire, distance):
-    """Offset a closed wire outward by `distance` with sharp corners
-    (join type 2, corners extended to their intersection), regardless
-    of the wire's orientation (makeOffset2D's sign follows it)."""
+def offset_outline(wire, distance):
+    """Offset a closed wire by `distance` with sharp corners (join type
+    2, corners extended to their intersection): positive is outward,
+    negative inward. makeOffset2D's own sign follows the wire's
+    orientation, so pick the candidate whose area moved the right way.
+    """
     original_area = Part.Face(wire).Area
-    grown = wire.makeOffset2D(distance, 2)
-    if Part.Face(grown).Area < original_area:
-        grown = wire.makeOffset2D(-distance, 2)
-    if Part.Face(grown).Area <= original_area:
+    wants_growth = distance > 0
+
+    def moved_correctly(candidate_wire):
+        area = Part.Face(candidate_wire).Area
+        return area > original_area if wants_growth else area < original_area
+
+    candidate = wire.makeOffset2D(distance, 2)
+    if not moved_correctly(candidate):
+        candidate = wire.makeOffset2D(-distance, 2)
+    if not moved_correctly(candidate):
         raise SystemExit(f"error: offsetting the outline by {distance} mm failed")
-    return grown
+    return candidate
 
 
 def outline_straight_segments(outline_wire):
@@ -609,7 +630,7 @@ def add_standoffs(
     return result
 
 
-def build_tray(outline_wire, up, gap, wall, floor, depth):
+def build_tray(outline_wire, up, gap, wall, floor, depth, ledge_width, ledge_height):
     # Both walls are built from the sharpened outline so every corner
     # can carry a chosen radius. Each bend, convex or concave, gets the
     # corner radius on its outside and corner radius minus wall on its
@@ -619,8 +640,8 @@ def build_tray(outline_wire, up, gap, wall, floor, depth):
     # rounds; corner clearance only ever grows relative to the nominal
     # gap, never shrinks.
     sharp_outline = sharpen_outline(outline_wire, up)
-    cavity_polygon = grow(sharp_outline, gap)
-    outer_wire = grow(sharp_outline, gap + wall)
+    cavity_polygon = offset_outline(sharp_outline, gap)
+    outer_wire = offset_outline(sharp_outline, gap + wall)
     corner_radius = min(
         gap + wall,
         math.floor(100.0 * CORNER_FIT_SAFETY * max_uniform_corner_radius(outer_wire))
@@ -628,14 +649,18 @@ def build_tray(outline_wire, up, gap, wall, floor, depth):
     )
 
     outer_wire.translate(up * -floor)
-    shell = fillet_prism_corners(
-        Part.Face(outer_wire).extrude(up * (floor + depth)),
-        outer_wire,
-        up,
-        convex_radius=corner_radius,
-        concave_radius=corner_radius - wall,
-    )
 
+    def outer_prism(height_above_floor):
+        prism = Part.Face(outer_wire).extrude(up * (floor + height_above_floor))
+        return fillet_prism_corners(
+            prism,
+            outer_wire,
+            up,
+            convex_radius=corner_radius,
+            concave_radius=corner_radius - wall,
+        )
+
+    shell = outer_prism(depth)
     cavity_prism = fillet_prism_corners(
         Part.Face(cavity_polygon).extrude(up * (depth + CAVITY_CUT_EXTRA_MM)),
         cavity_polygon,
@@ -646,6 +671,43 @@ def build_tray(outline_wire, up, gap, wall, floor, depth):
 
     tray = shell.cut(cavity_prism)
     validate_tray(tray, shell, cavity_prism, depth)
+
+    if ledge_width > 0:
+        # The ledge: a shelf along the cavity wall for the board's
+        # perimeter to rest on, its top level with the standoff tops.
+        # The well inside it continues the concentric corner treatment
+        # inward: convex corners have run out of radius there (sharp),
+        # concave ones grow by the ledge width.
+        if ledge_width <= gap:
+            raise SystemExit(
+                f"error: ledge_width {ledge_width} mm must exceed the gap "
+                f"{gap} mm for the board to rest on the ledge"
+            )
+        well_polygon = offset_outline(sharp_outline, gap - ledge_width)
+        well_prism = fillet_prism_corners(
+            Part.Face(well_polygon).extrude(
+                up * (ledge_height + CAVITY_CUT_EXTRA_MM)
+            ),
+            well_polygon,
+            up,
+            convex_radius=corner_radius - wall - ledge_width,
+            concave_radius=corner_radius + ledge_width,
+        )
+        ledge_ring = outer_prism(ledge_height).cut(well_prism)
+        volume_before_ledge = tray.Volume
+        tray = tray.fuse(ledge_ring)
+        if not tray.isValid() or len(tray.Solids) != 1:
+            raise SystemExit("error: fusing the ledge broke the solid")
+        added_volume = tray.Volume - volume_before_ledge
+        nominal_volume = (
+            Part.Face(cavity_polygon).Area - Part.Face(well_polygon).Area
+        ) * ledge_height
+        if not 0.85 * nominal_volume < added_volume < 1.15 * nominal_volume:
+            raise SystemExit(
+                f"error: ledge added {added_volume:.1f} mm3, expected about "
+                f"{nominal_volume:.1f} mm3; geometry is off"
+            )
+
     return tray, corner_radius
 
 
@@ -704,6 +766,8 @@ def main():
         arguments.wall,
         arguments.floor,
         arguments.depth,
+        arguments.ledge_width,
+        arguments.standoff_height,
     )
     hole_centers = mounting_hole_centers(
         board_shape, up, resting_face.Surface.Position
@@ -735,6 +799,10 @@ def main():
           f"{MOUNTING_HOLE_DIAMETER_MM} mm drills, {arguments.standoff_diameter} mm "
           f"wide, {arguments.standoff_hole_diameter} mm bore, "
           f"{arguments.standoff_height} mm tall")
+    if arguments.ledge_width > 0:
+        print(f"ledge:      {arguments.ledge_width} mm wide along the cavity wall, "
+              f"{arguments.standoff_height} mm tall, "
+              f"{arguments.ledge_width - arguments.gap:.2f} mm under the board edge")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
