@@ -63,10 +63,10 @@ import Part
 
 # Tray design parameters, all in mm. Overridable per run with key=value
 # command line words; the corner radii derive from gap and wall.
-DEFAULT_GAP_MM = 0.6  # clearance between PCB edge and cavity wall
-DEFAULT_WALL_MM = 0.4  # wall thickness (one nozzle width)
-DEFAULT_FLOOR_MM = 0.6  # floor thickness
-DEFAULT_HEIGHT_MM = 10.0  # total tray height including the floor
+DEFAULT_GAP_MM = 0.2  # clearance between PCB edge and cavity wall
+DEFAULT_WALL_MM = 0.8  # wall thickness (two nozzle widths)
+DEFAULT_FLOOR_MM = 1.2  # floor thickness
+DEFAULT_HEIGHT_MM = 14.1  # total tray height including the floor
 DEFAULT_STANDOFF_HEIGHT_MM = 8.0  # insert standoff height above the floor
 DEFAULT_STANDOFF_DIAMETER_MM = 5.8  # insert standoff outer diameter
 DEFAULT_STANDOFF_HOLE_DIAMETER_MM = 3.2  # bore for an M2 heat-set insert
