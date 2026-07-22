@@ -12,7 +12,9 @@ Generated outputs (gerbers, BOM, schematic and assembly PDFs, STEP model) live i
 
     docker build -t freecad-headless -f scripts/freecad.Dockerfile scripts
     docker run --rm -v "$PWD":/work -w /work freecad-headless \
-        freecadcmd scripts/export_tray.py --pass output/v1/kbdkid4_v1.step tray.stl [gap=0.8] [wall=0.4] [floor=0.6] [height=10.0] [flip]
+        freecadcmd scripts/export_tray.py --pass output/v1/kbdkid4_v1.step tray.stl [key=value ...] [flip]
+
+The parameters (gap, wall, floor, height, standoff dimensions) and their defaults are listed in the script's usage header and constants block.
 
 CI runs this against the freshly generated STEP and uploads the result as the `tray-stl` workflow artifact.
 

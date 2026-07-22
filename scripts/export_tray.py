@@ -40,6 +40,12 @@ filleted. The cavity therefore does not follow the board's own corner
 rounds; its corner clearance only ever grows relative to the nominal
 gap, never shrinks.
 
+At each of the board's mounting drills (MOUNTING_HOLE_DIAMETER_MM,
+found in the STEP geometry rather than assumed) a cylindrical standoff
+rises from the tray floor, bored for an M2 heat-set insert. The bore's
+floor is the tray floor's top surface, so the floor thickness of
+material backs the insert.
+
 The design values live in the constants right below this docstring;
 everything else derives from them.
 """
@@ -61,6 +67,13 @@ DEFAULT_GAP_MM = 0.8  # clearance between PCB edge and cavity wall
 DEFAULT_WALL_MM = 0.4  # wall thickness (one nozzle width)
 DEFAULT_FLOOR_MM = 0.6  # floor thickness
 DEFAULT_HEIGHT_MM = 10.0  # total tray height including the floor
+DEFAULT_STANDOFF_HEIGHT_MM = 8.0  # insert standoff height above the floor
+DEFAULT_STANDOFF_DIAMETER_MM = 5.8  # insert standoff outer diameter
+DEFAULT_STANDOFF_HOLE_DIAMETER_MM = 3.2  # bore for an M2 heat-set insert
+
+# The board's mounting drills, which the standoffs line up with.
+MOUNTING_HOLE_DIAMETER_MM = 2.4
+MOUNTING_HOLE_TOLERANCE_MM = 0.1
 
 # Implementation tuning, rarely worth touching.
 CORNER_FIT_SAFETY = 0.95  # margin on the largest corner radius that fits
@@ -94,12 +107,18 @@ USAGE = f"""\
 usage: freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl>
            [gap={DEFAULT_GAP_MM}] [wall={DEFAULT_WALL_MM}] \
 [floor={DEFAULT_FLOOR_MM}] [height={DEFAULT_HEIGHT_MM}] [flip]
+           [standoff_height={DEFAULT_STANDOFF_HEIGHT_MM}] \
+[standoff_diameter={DEFAULT_STANDOFF_DIAMETER_MM}] \
+[standoff_hole_diameter={DEFAULT_STANDOFF_HOLE_DIAMETER_MM}]
 
   gap     clearance between PCB edge and cavity wall, mm
   wall    tray wall thickness, mm
   floor   tray floor thickness, mm
   height  total tray height including the floor, mm
-  flip    open the cavity toward the opposite side of the automatic choice\
+  flip    open the cavity toward the opposite side of the automatic choice
+  standoff_height         insert standoff height above the floor, mm
+  standoff_diameter       insert standoff outer diameter, mm
+  standoff_hole_diameter  bore for the heat-set insert, mm\
 """
 
 
@@ -111,12 +130,23 @@ class Arguments:
         self.wall = DEFAULT_WALL_MM
         self.floor = DEFAULT_FLOOR_MM
         self.height = DEFAULT_HEIGHT_MM
+        self.standoff_height = DEFAULT_STANDOFF_HEIGHT_MM
+        self.standoff_diameter = DEFAULT_STANDOFF_DIAMETER_MM
+        self.standoff_hole_diameter = DEFAULT_STANDOFF_HOLE_DIAMETER_MM
         self.flip = False
 
 
 def parse_arguments(argument_list):
     arguments = Arguments()
-    numeric_keys = ("gap", "wall", "floor", "height")
+    numeric_keys = (
+        "gap",
+        "wall",
+        "floor",
+        "height",
+        "standoff_height",
+        "standoff_diameter",
+        "standoff_hole_diameter",
+    )
     positionals = []
     for argument in argument_list:
         if argument == "flip":
@@ -476,6 +506,106 @@ def max_uniform_corner_radius(polygon_wire):
     return radius_limit
 
 
+def project_to_plane(point, plane_point, normal):
+    return point.sub(normal * normal.dot(point.sub(plane_point)))
+
+
+def mounting_hole_centers(board_shape, up, plane_point):
+    """Centers of the board's mounting drills, projected onto the tray
+    floor plane.
+
+    A mounting drill appears in the board solid as cylindrical faces of
+    the configured diameter with their axis along the board normal,
+    together spanning the full circle. The full-circle test excludes
+    outline corner arcs; the diameter tolerance excludes pad drills and
+    vias (this board's other drills are 0.3, 0.5 and 2.0 mm).
+    """
+    angular_spans = {}
+    centers = {}
+    for face in board_shape.Faces:
+        surface = face.Surface
+        if not isinstance(surface, Part.Cylinder):
+            continue
+        if abs(surface.Axis.dot(up)) < 0.999:
+            continue
+        diameter = 2.0 * surface.Radius
+        if abs(diameter - MOUNTING_HOLE_DIAMETER_MM) > MOUNTING_HOLE_TOLERANCE_MM:
+            continue
+        center = project_to_plane(surface.Center, plane_point, up)
+        key = (round(center.x, 2), round(center.y, 2), round(center.z, 2))
+        parameter_range = face.ParameterRange
+        angular_spans[key] = angular_spans.get(key, 0.0) + (
+            parameter_range[1] - parameter_range[0]
+        )
+        centers[key] = center
+    found = [
+        centers[key]
+        for key, span in angular_spans.items()
+        if span > 1.9 * math.pi
+    ]
+    if not found:
+        raise SystemExit(
+            f"error: no {MOUNTING_HOLE_DIAMETER_MM} mm mounting holes found "
+            "in the board"
+        )
+    return sorted(found, key=lambda center: (center.x, center.y))
+
+
+def add_standoffs(
+    tray, hole_centers, up, floor, standoff_height, standoff_diameter,
+    standoff_hole_diameter,
+):
+    """Fuse an insert standoff onto the tray floor at each mounting hole
+    center and bore it for a heat-set insert.
+
+    The standoff body reaches down to the underside of the floor so the
+    fuse never leaves a seam; the bore's floor is the tray floor's top
+    surface, leaving the floor thickness of material under the insert.
+    """
+    if standoff_hole_diameter >= standoff_diameter:
+        raise SystemExit(
+            f"error: standoff hole {standoff_hole_diameter} mm must be "
+            f"smaller than the standoff diameter {standoff_diameter} mm"
+        )
+    bodies = []
+    bores = []
+    for center in hole_centers:
+        base = center.sub(up * floor)
+        bodies.append(
+            Part.makeCylinder(
+                standoff_diameter / 2.0, floor + standoff_height, base, up
+            )
+        )
+        bores.append(
+            Part.makeCylinder(
+                standoff_hole_diameter / 2.0,
+                standoff_height + CAVITY_CUT_EXTRA_MM,
+                center,
+                up,
+            )
+        )
+    volume_before = tray.Volume
+    result = tray.fuse(Part.makeCompound(bodies))
+    result = result.cut(Part.makeCompound(bores))
+    result = result.removeSplitter()
+    if not result.isValid() or len(result.Solids) != 1:
+        raise SystemExit("error: adding the standoffs broke the solid")
+    added_volume = result.Volume - volume_before
+    expected_volume = (
+        len(hole_centers)
+        * math.pi
+        / 4.0
+        * (standoff_diameter**2 - standoff_hole_diameter**2)
+        * standoff_height
+    )
+    if added_volume <= 0 or added_volume > 1.001 * expected_volume:
+        raise SystemExit(
+            f"error: standoffs added {added_volume:.1f} mm3, expected up to "
+            f"{expected_volume:.1f} mm3; geometry is off"
+        )
+    return result
+
+
 def build_tray(outline_wire, up, gap, wall, floor, height):
     # Both walls are built from the sharpened outline so every corner
     # can carry a chosen radius. Each bend, convex or concave, gets the
@@ -572,6 +702,18 @@ def main():
         arguments.floor,
         arguments.height,
     )
+    hole_centers = mounting_hole_centers(
+        board_shape, up, resting_face.Surface.Position
+    )
+    tray = add_standoffs(
+        tray,
+        hole_centers,
+        up,
+        arguments.floor,
+        arguments.standoff_height,
+        arguments.standoff_diameter,
+        arguments.standoff_hole_diameter,
+    )
     mesh = export_stl(tray, arguments.stl_file)
 
     board_box = board_shape.BoundBox
@@ -585,6 +727,10 @@ def main():
           f"volume {tray.Volume / 1000.0:.2f} cm3")
     print(f"corners:    every bend {max(corner_radius - arguments.wall, 0.0):.2f} mm "
           f"inside / {corner_radius:.2f} mm outside, concentric")
+    print(f"standoffs:  {len(hole_centers)} posts at the board's "
+          f"{MOUNTING_HOLE_DIAMETER_MM} mm drills, {arguments.standoff_diameter} mm "
+          f"wide, {arguments.standoff_hole_diameter} mm bore, "
+          f"{arguments.standoff_height} mm tall")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
