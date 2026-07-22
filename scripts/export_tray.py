@@ -34,7 +34,12 @@ corners come pre-rounded from
 the PCB design) is rebuilt as a sharp-corner polygon, offset with
 sharp joins, extruded, and the shell's vertical edges are filleted
 before the cavity is cut. The cavity itself keeps the plain offset
-geometry so the board clearance stays constant everywhere.
+geometry so the board clearance stays constant everywhere. The one
+exception: where the outline is concave the offset trims the cavity
+wall to a sharp corner, and since the outer shell got a cove fillet
+there, a sharp inner side would locally widen the wall. Those corners
+are rounded with radius corner radius plus wall, concentric with the
+cove, keeping the wall width constant through the corner.
 """
 
 import math
@@ -360,6 +365,53 @@ def sharpen_outline(outline_wire, normal):
     return Part.makePolygon(corner_points + [corner_points[0]])
 
 
+def faces_meet_smoothly(face_a, face_b, edge):
+    """Whether two faces join tangentially along an edge (e.g. a wall
+    plane running into a corner-round cylinder)."""
+    point = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
+    normals = []
+    for face in (face_a, face_b):
+        u, v = face.Surface.parameter(point)
+        normals.append(face.normalAt(u, v))
+    return abs(normals[0].dot(normals[1])) > 0.985
+
+
+def fillet_sharp_cavity_corners(tray, up, radius):
+    """Round the cavity's sharp vertical corners, returning the new
+    solid and how many corners were rounded.
+
+    Offsetting the outline trims the cavity wall to a sharp corner
+    wherever the outline is concave. Since the outer shell gets a cove
+    fillet at those spots, a sharp inner side would locally widen the
+    wall well past its nominal thickness; a fillet of outer radius plus
+    wall thickness is concentric with the cove and keeps the wall
+    constant. After the shell fillets these sharp corners are the only
+    vertical line edges left with a real dihedral angle, which is how
+    they are found; tangent seam edges must be skipped, OCC cannot
+    fillet those.
+    """
+    sharp_edges = []
+    for edge in tray.Edges:
+        if not isinstance(edge.Curve, Part.Line):
+            continue
+        direction = edge.valueAt(edge.LastParameter).sub(
+            edge.valueAt(edge.FirstParameter)
+        )
+        if direction.Length < 1e-9:
+            continue
+        if abs(direction.normalize().dot(up)) < 0.999:
+            continue
+        adjacent_faces = tray.ancestorsOfType(edge, Part.Face)
+        if len(adjacent_faces) != 2:
+            continue
+        if faces_meet_smoothly(adjacent_faces[0], adjacent_faces[1], edge):
+            continue
+        sharp_edges.append(edge)
+    if not sharp_edges:
+        return tray, 0
+    return tray.makeFillet(radius, sharp_edges), len(sharp_edges)
+
+
 def max_uniform_corner_radius(polygon_wire):
     """Largest fillet radius all corners of a polygon can share.
 
@@ -434,7 +486,20 @@ def build_tray(outline_wire, up, gap, wall, floor, height):
 
     tray = shell.cut(cavity)
     validate_tray(tray, shell, cavity_wire, floor, height)
-    return tray, corner_radius
+
+    volume_before_rounding = tray.Volume
+    tray, rounded_cavity_corners = fillet_sharp_cavity_corners(
+        tray, up, corner_radius + wall
+    )
+    if not tray.isValid() or len(tray.Solids) != 1:
+        raise SystemExit("error: rounding the cavity corners broke the solid")
+    removed_volume = volume_before_rounding - tray.Volume
+    if removed_volume < 0 or removed_volume > 0.02 * volume_before_rounding:
+        raise SystemExit(
+            f"error: cavity corner rounding removed {removed_volume:.1f} mm3, "
+            "outside the plausible range; geometry is off"
+        )
+    return tray, corner_radius, rounded_cavity_corners
 
 
 def validate_tray(tray, shell, cavity_wire, floor, height):
@@ -482,7 +547,7 @@ def main():
         outline_face_pair, open_toward_positive_axis
     )
 
-    tray, corner_radius = build_tray(
+    tray, corner_radius, rounded_cavity_corners = build_tray(
         resting_face.OuterWire,
         up,
         arguments.gap,
@@ -501,7 +566,9 @@ def main():
     print(f"tray:       gap {arguments.gap} mm, wall {arguments.wall} mm, "
           f"floor {arguments.floor} mm, height {arguments.height} mm, "
           f"volume {tray.Volume / 1000.0:.2f} cm3")
-    print(f"corners:    uniform {corner_radius:.2f} mm radius on the outer shell")
+    print(f"corners:    uniform {corner_radius:.2f} mm radius on the outer shell, "
+          f"{rounded_cavity_corners} sharp cavity corners rounded to "
+          f"{corner_radius + arguments.wall:.2f} mm")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
