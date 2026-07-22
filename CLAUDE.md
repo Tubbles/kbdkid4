@@ -10,7 +10,7 @@ LibrePCB project for kbdkid4, a split wireless keyboard. The `.lp` S-expression 
 
 ## Tray export
 
-`scripts/export_tray.py` builds a 3D-printable tray STL from the board's STEP model, running FreeCAD headless in a container (`scripts/freecad.Dockerfile`, Debian trixie's FreeCAD 1.0). Locally this machine has podman, not docker:
+`scripts/export_tray.py` builds a 3D-printable tray STL from the board's STEP model, with bored standoffs for M2 heat-set inserts at the board's mounting drills, running FreeCAD headless in a container (`scripts/freecad.Dockerfile`, Debian trixie's FreeCAD 1.0). Locally this machine has podman, not docker:
 
     podman build -t freecad-headless -f scripts/freecad.Dockerfile scripts
     podman run --rm -v "$PWD":/work -w /work freecad-headless \
@@ -28,5 +28,8 @@ The STL's Z orientation is not critical: the tray is mirrored in the slicer anyw
 
 ## Conventions
 
+- Commit and push completed changes without asking. Keep commits small and focused.
 - `tmp/` is untracked scratch space; `work/` holds design notes and is not committed.
 - Test any change to `scripts/export_tray.py` by running it in the container against `output/v1/kbdkid4_v1.step` and checking the exit code; freecadcmd hides Python failures unless the script exits via `os._exit`.
+- `boards/default/board.lp` is the design ground truth (outline polygon vertices, board-level mounting drills). Cross-check what the script detects from the STEP against it rather than trusting either alone.
+- To inspect geometry beyond the exit code, exec the script source with its trailing `run_and_exit()` line stripped (a plain import would run main and `os._exit` the interpreter), then drive its functions directly: census cylinder-face radii, sample wall thickness with `distToShape`, compare volumes against analytic values.
