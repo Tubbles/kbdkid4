@@ -63,7 +63,7 @@ import Part
 
 # Tray design parameters, all in mm. Overridable per run with key=value
 # command line words; the corner radii derive from gap and wall.
-DEFAULT_GAP_MM = 0.8  # clearance between PCB edge and cavity wall
+DEFAULT_GAP_MM = 0.6  # clearance between PCB edge and cavity wall
 DEFAULT_WALL_MM = 0.4  # wall thickness (one nozzle width)
 DEFAULT_FLOOR_MM = 0.6  # floor thickness
 DEFAULT_HEIGHT_MM = 10.0  # total tray height including the floor

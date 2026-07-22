@@ -14,7 +14,9 @@ LibrePCB project for kbdkid4, a split wireless keyboard. The `.lp` S-expression 
 
     podman build -t freecad-headless -f scripts/freecad.Dockerfile scripts
     podman run --rm -v "$PWD":/work -w /work freecad-headless \
-        freecadcmd scripts/export_tray.py --pass output/v1/kbdkid4_v1.step tmp/tray.stl [gap=0.8] [wall=0.4] [floor=0.6] [height=10.0] [flip]
+        freecadcmd scripts/export_tray.py --pass output/v1/kbdkid4_v1.step tmp/tray.stl [key=value ...] [flip]
+
+Parameters and their defaults live in the constants block at the top of the script; the usage header lists the key=value override names.
 
 The script locates the board without hardcoded face indices: by the `PCB` assembly label (a constant in LibrePCB's `stepexport.cpp`), validated geometrically, with a geometry-only fallback. Its module docstring documents the freecadcmd quirks that shaped it (exit codes swallowed, `__name__` set to the file stem, scripts run twice, dash-arguments intercepted even after `--pass`, hence the `key=value` argument style and `os._exit`). Read that docstring before writing any new FreeCAD script here.
 
