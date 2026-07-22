@@ -7,7 +7,10 @@ option parser intercepts dash-prefixed arguments even after "--pass"
 (observed on FreeCAD 1.0.0):
 
     freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl> \
-        [gap=0.8] [wall=0.4] [floor=0.6] [height=10.0] [flip]
+        [key=value ...] [flip]
+
+The key=value parameter names and their defaults are listed in the
+USAGE text and the constants block below.
 
 The board is located inside the STEP assembly without any hardcoded face
 indices, in two stages:
@@ -66,7 +69,7 @@ import Part
 DEFAULT_GAP_MM = 0.2  # clearance between PCB edge and cavity wall
 DEFAULT_WALL_MM = 0.8  # wall thickness (two nozzle widths)
 DEFAULT_FLOOR_MM = 1.2  # floor thickness
-DEFAULT_HEIGHT_MM = 14.1  # total tray height including the floor
+DEFAULT_DEPTH_MM = 12.9  # cavity depth, floor top to rim (overall height = depth + floor)
 DEFAULT_STANDOFF_HEIGHT_MM = 8.0  # insert standoff height above the floor
 DEFAULT_STANDOFF_DIAMETER_MM = 5.8  # insert standoff outer diameter
 DEFAULT_STANDOFF_HOLE_DIAMETER_MM = 3.2  # bore for an M2 heat-set insert
@@ -106,7 +109,7 @@ def script_arguments(argv):
 USAGE = f"""\
 usage: freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl>
            [gap={DEFAULT_GAP_MM}] [wall={DEFAULT_WALL_MM}] \
-[floor={DEFAULT_FLOOR_MM}] [height={DEFAULT_HEIGHT_MM}] [flip]
+[floor={DEFAULT_FLOOR_MM}] [depth={DEFAULT_DEPTH_MM}] [flip]
            [standoff_height={DEFAULT_STANDOFF_HEIGHT_MM}] \
 [standoff_diameter={DEFAULT_STANDOFF_DIAMETER_MM}] \
 [standoff_hole_diameter={DEFAULT_STANDOFF_HOLE_DIAMETER_MM}]
@@ -114,7 +117,7 @@ usage: freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl>
   gap     clearance between PCB edge and cavity wall, mm
   wall    tray wall thickness, mm
   floor   tray floor thickness, mm
-  height  total tray height including the floor, mm
+  depth   cavity depth from the floor's top to the rim, mm
   flip    open the cavity toward the opposite side of the automatic choice
   standoff_height         insert standoff height above the floor, mm
   standoff_diameter       insert standoff outer diameter, mm
@@ -129,7 +132,7 @@ class Arguments:
         self.gap = DEFAULT_GAP_MM
         self.wall = DEFAULT_WALL_MM
         self.floor = DEFAULT_FLOOR_MM
-        self.height = DEFAULT_HEIGHT_MM
+        self.depth = DEFAULT_DEPTH_MM
         self.standoff_height = DEFAULT_STANDOFF_HEIGHT_MM
         self.standoff_diameter = DEFAULT_STANDOFF_DIAMETER_MM
         self.standoff_hole_diameter = DEFAULT_STANDOFF_HOLE_DIAMETER_MM
@@ -142,7 +145,7 @@ def parse_arguments(argument_list):
         "gap",
         "wall",
         "floor",
-        "height",
+        "depth",
         "standoff_height",
         "standoff_diameter",
         "standoff_hole_diameter",
@@ -606,7 +609,7 @@ def add_standoffs(
     return result
 
 
-def build_tray(outline_wire, up, gap, wall, floor, height):
+def build_tray(outline_wire, up, gap, wall, floor, depth):
     # Both walls are built from the sharpened outline so every corner
     # can carry a chosen radius. Each bend, convex or concave, gets the
     # corner radius on its outside and corner radius minus wall on its
@@ -626,7 +629,7 @@ def build_tray(outline_wire, up, gap, wall, floor, height):
 
     outer_wire.translate(up * -floor)
     shell = fillet_prism_corners(
-        Part.Face(outer_wire).extrude(up * height),
+        Part.Face(outer_wire).extrude(up * (floor + depth)),
         outer_wire,
         up,
         convex_radius=corner_radius,
@@ -634,7 +637,7 @@ def build_tray(outline_wire, up, gap, wall, floor, height):
     )
 
     cavity_prism = fillet_prism_corners(
-        Part.Face(cavity_polygon).extrude(up * (height - floor + CAVITY_CUT_EXTRA_MM)),
+        Part.Face(cavity_polygon).extrude(up * (depth + CAVITY_CUT_EXTRA_MM)),
         cavity_polygon,
         up,
         convex_radius=corner_radius - wall,
@@ -642,18 +645,18 @@ def build_tray(outline_wire, up, gap, wall, floor, height):
     )
 
     tray = shell.cut(cavity_prism)
-    validate_tray(tray, shell, cavity_prism, floor, height)
+    validate_tray(tray, shell, cavity_prism, depth)
     return tray, corner_radius
 
 
-def validate_tray(tray, shell, cavity_prism, floor, height):
+def validate_tray(tray, shell, cavity_prism, depth):
     if not tray.isValid() or len(tray.Solids) != 1:
         raise SystemExit("error: tray boolean cut produced an invalid solid")
     # The cavity prism is a straight extrusion, so the part of it that
     # overlaps the shell scales linearly with height.
-    cavity_height = height - floor + CAVITY_CUT_EXTRA_MM
+    cavity_height = depth + CAVITY_CUT_EXTRA_MM
     expected_volume = (
-        shell.Volume - cavity_prism.Volume * (height - floor) / cavity_height
+        shell.Volume - cavity_prism.Volume * depth / cavity_height
     )
     if abs(tray.Volume - expected_volume) > 0.001 * expected_volume:
         raise SystemExit(
@@ -700,7 +703,7 @@ def main():
         arguments.gap,
         arguments.wall,
         arguments.floor,
-        arguments.height,
+        arguments.depth,
     )
     hole_centers = mounting_hole_centers(
         board_shape, up, resting_face.Surface.Position
@@ -723,7 +726,8 @@ def main():
     print(f"opening:    toward {'+' if up.dot(axis) > 0 else '-'}{axis_name(axis)}"
           f"{' (flipped)' if arguments.flip else ''}")
     print(f"tray:       gap {arguments.gap} mm, wall {arguments.wall} mm, "
-          f"floor {arguments.floor} mm, height {arguments.height} mm, "
+          f"floor {arguments.floor} mm, depth {arguments.depth} mm "
+          f"({arguments.floor + arguments.depth:.1f} mm overall), "
           f"volume {tray.Volume / 1000.0:.2f} cm3")
     print(f"corners:    every bend {max(corner_radius - arguments.wall, 0.0):.2f} mm "
           f"inside / {corner_radius:.2f} mm outside, concentric")
