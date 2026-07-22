@@ -2,8 +2,9 @@
 
 ## Description
 
-This is a [LibrePCB](https://librepcb.org) project!
-Just edit this file to add a description about it.
+kbdkid4 is a split wireless keyboard, designed in [LibrePCB](https://librepcb.org).
+
+Generated outputs (gerbers, BOM, schematic and assembly PDFs, STEP model) live in `output/v1/` and are also rebuilt by CI on every push, which publishes them as workflow artifacts and to GitHub Pages.
 
 ## 3D printed tray
 
