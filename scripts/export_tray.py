@@ -26,6 +26,15 @@ The tray's cavity opens toward the side of the board where components
 protrude the furthest, so the bare(r) side rests on the tray floor.
 Pass the word "flip" to override. The tray is positioned in board
 coordinates: the cavity floor touches the board's resting face.
+
+All vertical corners of the outer shell share one radius: gap + wall,
+capped by what the shortest outline step can geometrically fit (the
+chosen value is printed). To get that, the board outline (whose
+corners come pre-rounded from
+the PCB design) is rebuilt as a sharp-corner polygon, offset with
+sharp joins, extruded, and the shell's vertical edges are filleted
+before the cavity is cut. The cavity itself keeps the plain offset
+geometry so the board clearance stays constant everywhere.
 """
 
 import math
@@ -46,6 +55,7 @@ BOARD_LABEL_PATTERN = re.compile(r"^PCB\d*(:\d+)?$")
 BOARD_THICKNESS_RANGE_MM = (0.2, 5.0)
 PARTNER_FACE_AREA_TOLERANCE = 0.05
 MESH_LINEAR_DEFLECTION_MM = 0.05
+SHARPEN_MAX_CORNER_RADIUS_MM = 3.0
 
 
 def script_arguments(argv):
@@ -273,40 +283,165 @@ def pick_resting_face(outline_face_pair, open_toward_positive_axis):
     return high_face, axis.negative()
 
 
-def grow(wire, distance):
+def grow(wire, distance, sharp=False):
     """Offset a closed wire outward by `distance`, regardless of the
-    wire's orientation (makeOffset2D's sign follows orientation)."""
+    wire's orientation (makeOffset2D's sign follows orientation).
+
+    With sharp=True convex corners are extended to their intersection
+    (join type 2) instead of being arced over.
+    """
+    join_type = 2 if sharp else 0
     original_area = Part.Face(wire).Area
-    grown = wire.makeOffset2D(distance)
+    grown = wire.makeOffset2D(distance, join_type)
     if Part.Face(grown).Area < original_area:
-        grown = wire.makeOffset2D(-distance)
+        grown = wire.makeOffset2D(-distance, join_type)
     if Part.Face(grown).Area <= original_area:
         raise SystemExit(f"error: offsetting the outline by {distance} mm failed")
     return grown
 
 
+def outline_straight_segments(outline_wire):
+    """The outline's straight segments in wire order, as (point,
+    direction) pairs. The small corner arcs between them are dropped;
+    a large arc means the outline has a curved edge this script's
+    uniform-corner rebuild cannot represent, so that is an error."""
+    segments = []
+    for edge in outline_wire.OrderedEdges:
+        curve = edge.Curve
+        if isinstance(curve, Part.Line):
+            start = edge.valueAt(edge.FirstParameter)
+            end = edge.valueAt(edge.LastParameter)
+            segments.append((start, end.sub(start)))
+        elif isinstance(curve, Part.Circle):
+            if curve.Radius > SHARPEN_MAX_CORNER_RADIUS_MM:
+                raise SystemExit(
+                    f"error: outline contains an arc of radius "
+                    f"{curve.Radius:.2f} mm, too large to be treated as a "
+                    "corner round"
+                )
+        else:
+            raise SystemExit(
+                f"error: unsupported outline edge type "
+                f"{type(curve).__name__}"
+            )
+    if len(segments) < 3:
+        raise SystemExit("error: outline has fewer than 3 straight segments")
+    return segments
+
+
+def intersect_in_plane(point_a, direction_a, point_b, direction_b, normal):
+    """Intersection of two lines lying in the plane with the given
+    normal, or None for (near) parallel lines."""
+    denominator = direction_a.cross(direction_b).dot(normal)
+    if abs(denominator) < 1e-9 * direction_a.Length * direction_b.Length:
+        return None
+    parameter = point_b.sub(point_a).cross(direction_b).dot(normal) / denominator
+    return point_a.add(direction_a * parameter)
+
+
+def sharpen_outline(outline_wire, normal):
+    """Rebuild the outline as a sharp-corner polygon: keep the straight
+    segments and extend neighbours to their intersections, dropping the
+    corner rounds the board outline already carries. This is what makes
+    a single uniform corner radius possible later on."""
+    segments = outline_straight_segments(outline_wire)
+    corner_points = []
+    for index, (point_a, direction_a) in enumerate(segments):
+        point_b, direction_b = segments[(index + 1) % len(segments)]
+        corner = intersect_in_plane(
+            point_a, direction_a, point_b, direction_b, normal
+        )
+        if corner is None:
+            raise SystemExit(
+                "error: successive parallel outline segments, cannot "
+                "rebuild a sharp-corner outline"
+            )
+        corner_points.append(corner)
+    return Part.makePolygon(corner_points + [corner_points[0]])
+
+
+def max_uniform_corner_radius(polygon_wire):
+    """Largest fillet radius all corners of a polygon can share.
+
+    A fillet with radius R at a corner with turn angle t consumes
+    R * tan(t / 2) of each adjacent edge, so every edge must be at
+    least as long as the demands of the fillets at its two ends.
+    """
+    points = [vertex.Point for vertex in polygon_wire.OrderedVertexes]
+    count = len(points)
+    directions = []
+    lengths = []
+    for index in range(count):
+        vector = points[(index + 1) % count].sub(points[index])
+        lengths.append(vector.Length)
+        directions.append(vector.normalize())
+    demands = []
+    for index in range(count):
+        cosine = max(-1.0, min(1.0, directions[index - 1].dot(directions[index])))
+        demands.append(math.tan(math.acos(cosine) / 2.0))
+    radius_limit = None
+    for index in range(count):
+        demand_sum = demands[index] + demands[(index + 1) % count]
+        if demand_sum < 1e-9:
+            continue
+        limit = lengths[index] / demand_sum
+        if radius_limit is None or limit < radius_limit:
+            radius_limit = limit
+    if radius_limit is None:
+        raise SystemExit("error: outline polygon has no corners to fillet")
+    return radius_limit
+
+
+def fillet_vertical_edges(solid, up, radius):
+    """Fillet every straight vertical edge of a prism, giving all its
+    corners the same radius."""
+    vertical_edges = []
+    for edge in solid.Edges:
+        if not isinstance(edge.Curve, Part.Line):
+            continue
+        direction = edge.valueAt(edge.LastParameter).sub(
+            edge.valueAt(edge.FirstParameter)
+        )
+        if direction.Length < 1e-9:
+            continue
+        if abs(direction.normalize().dot(up)) > 0.999:
+            vertical_edges.append(edge)
+    if not vertical_edges:
+        raise SystemExit("error: no vertical corner edges found to fillet")
+    return solid.makeFillet(radius, vertical_edges)
+
+
 def build_tray(outline_wire, up, gap, wall, floor, height):
+    # The cavity follows the board outline exactly (constant clearance,
+    # corner rounds included). The outer shell is rebuilt sharp and then
+    # filleted so every visible corner shares one radius: gap + wall,
+    # which at a 90 degree corner passes through the same point a plain
+    # offset arc would, capped by what the shortest outline step can
+    # geometrically fit.
     cavity_wire = grow(outline_wire, gap)
-    outer_wire = grow(cavity_wire, wall)
+    outer_wire = grow(sharpen_outline(outline_wire, up), gap + wall, sharp=True)
+    corner_radius = min(
+        gap + wall,
+        math.floor(95.0 * max_uniform_corner_radius(outer_wire)) / 100.0,
+    )
 
     outer_face = Part.Face(outer_wire)
     outer_face.translate(up * -floor)
-    shell = outer_face.extrude(up * height)
+    shell = fillet_vertical_edges(outer_face.extrude(up * height), up, corner_radius)
 
     cavity_face = Part.Face(cavity_wire)
     cavity = cavity_face.extrude(up * (height - floor + 1.0))
 
     tray = shell.cut(cavity)
-    validate_tray(tray, outer_wire, cavity_wire, floor, height)
-    return tray
+    validate_tray(tray, shell, cavity_wire, floor, height)
+    return tray, corner_radius
 
 
-def validate_tray(tray, outer_wire, cavity_wire, floor, height):
+def validate_tray(tray, shell, cavity_wire, floor, height):
     if not tray.isValid() or len(tray.Solids) != 1:
         raise SystemExit("error: tray boolean cut produced an invalid solid")
     expected_volume = (
-        Part.Face(outer_wire).Area * height
-        - Part.Face(cavity_wire).Area * (height - floor)
+        shell.Volume - Part.Face(cavity_wire).Area * (height - floor)
     )
     if abs(tray.Volume - expected_volume) > 0.001 * expected_volume:
         raise SystemExit(
@@ -347,7 +482,7 @@ def main():
         outline_face_pair, open_toward_positive_axis
     )
 
-    tray = build_tray(
+    tray, corner_radius = build_tray(
         resting_face.OuterWire,
         up,
         arguments.gap,
@@ -366,6 +501,7 @@ def main():
     print(f"tray:       gap {arguments.gap} mm, wall {arguments.wall} mm, "
           f"floor {arguments.floor} mm, height {arguments.height} mm, "
           f"volume {tray.Volume / 1000.0:.2f} cm3")
+    print(f"corners:    uniform {corner_radius:.2f} mm radius on the outer shell")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
