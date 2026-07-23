@@ -116,10 +116,13 @@ POWER_SWITCH_NOTCH_WIDTH_MM = 9.3  # along the wall, the whole segment
 # segment, down to the nice!nano below it, so that rim gets the same
 # treatment over the whole neighbouring segment. The width derives from
 # the segment; the notch reaches past the corner shared with the switch
-# notch so the two openings merge instead of leaving a sliver tooth,
-# and just past the far corner round's sharpened end.
+# notch so the two openings merge instead of leaving a sliver: the two
+# rectangular cutters' end faces meet at an angle, so the reach must
+# cover the outer corner wedge between them, which extends about
+# 1.3 mm past the corner. It also reaches just past the far corner
+# round's sharpened end.
 USB_NOTCH_DEPTH_MM = 3.2
-USB_NOTCH_PAST_SHARED_CORNER_MM = 1.0
+USB_NOTCH_PAST_SHARED_CORNER_MM = 2.5
 USB_NOTCH_PAST_FAR_CORNER_MM = 0.5
 
 # Implementation tuning, rarely worth touching.
