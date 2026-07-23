@@ -30,6 +30,11 @@ import Part
 MOUNTING_HOLE_DIAMETER_MM = 2.4
 MOUNTING_HOLE_TOLERANCE_MM = 0.1
 
+# The board design sources, for data the STEP does not carry (switch
+# positions; many components have no 3D model).
+BOARD_LP_FILE = "boards/default/board.lp"
+CIRCUIT_LP_FILE = "circuit/circuit.lp"
+
 # LibrePCB names the board body "PCB" ("PCB1", "PCB2", ... for multiple
 # outlines); depending on the FreeCAD version the imported object carries
 # the product label ("PCB") or the instance label ("PCB:1").
@@ -258,6 +263,34 @@ def mounting_hole_centers(board_shape, up, plane_point):
             "in the board"
         )
     return sorted(found, key=lambda center: (center.x, center.y))
+
+
+def component_positions(name_pattern):
+    """Positions of placed components whose circuit name matches the
+    pattern, as {name: vector}, joined from the board sources: device
+    positions are keyed by component UUID in the board layout, names
+    live in the circuit."""
+    circuit = open(CIRCUIT_LP_FILE).read()
+    board = open(BOARD_LP_FILE).read()
+    names = {}
+    for match in re.finditer(
+        r"\(component ([0-9a-f-]{36})(.*?)\(name \"([^\"]+)\"\)", circuit, re.S
+    ):
+        names[match.group(1)] = match.group(3)
+    positions = {}
+    for match in re.finditer(
+        r"\(device ([0-9a-f-]{36})\s.*?\(position ([0-9.-]+) ([0-9.-]+)\)",
+        board,
+        re.S,
+    ):
+        positions[match.group(1)] = App.Vector(
+            float(match.group(2)), float(match.group(3)), 0.0
+        )
+    return {
+        name: positions[uuid]
+        for uuid, name in names.items()
+        if name_pattern.fullmatch(name) and uuid in positions
+    }
 
 
 def export_stl(shape, stl_file):

@@ -56,6 +56,11 @@ under the board, and the board rests on ledge and standoffs together.
 The well inside the ledge continues the concentric corner treatment
 inward. Set ledge_width to 0 to build without a ledge.
 
+The battery switch (POWER_SWITCH_NAME, located via the board sources
+since it has no 3D model in the STEP) protrudes past the board
+outline, so the wall gets a notch cut down from the rim over the
+outline segment nearest the switch.
+
 The design values live in the constants right below this docstring;
 everything else derives from them.
 """
@@ -69,8 +74,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import FreeCAD as App
 import Part
 
+import re
+
 from board_step import (
     MOUNTING_HOLE_DIAMETER_MM,
+    component_positions,
     deduplicate_shapes,
     export_stl,
     find_board,
@@ -93,6 +101,14 @@ DEFAULT_STANDOFF_HEIGHT_MM = 8.0  # insert standoff height above the floor
 DEFAULT_STANDOFF_DIAMETER_MM = 5.8  # insert standoff outer diameter
 DEFAULT_STANDOFF_HOLE_DIAMETER_MM = 3.2  # bore for an M2 heat-set insert
 DEFAULT_LEDGE_WIDTH_MM = 1.0  # PCB support ledge from the cavity wall (0 disables)
+
+# The battery switch protrudes past the board outline, so the wall gets
+# a notch cut down from the rim over the outline segment nearest the
+# switch. The switch position comes from the board sources (it has no
+# 3D model in the STEP).
+POWER_SWITCH_NAME = "S1"
+POWER_SWITCH_NOTCH_DEPTH_MM = 3.2  # cut down from the rim
+POWER_SWITCH_NOTCH_WIDTH_MM = 9.3  # along the wall, the whole segment
 
 # Implementation tuning, rarely worth touching.
 CORNER_FIT_SAFETY = 0.95  # margin on the largest corner radius that fits
@@ -410,6 +426,61 @@ def add_standoffs(
     return result
 
 
+def cut_switch_notch(tray, outline_wire, up, switch_position, gap, wall, depth):
+    """Open a notch in the wall's rim over the outline segment nearest
+    the power switch, which protrudes past the board outline there.
+
+    The cut spans the full wall thickness, POWER_SWITCH_NOTCH_WIDTH_MM
+    along the wall centered on the switch's projection onto the
+    segment, POWER_SWITCH_NOTCH_DEPTH_MM down from the rim.
+    """
+    best = None
+    for start, vector in outline_straight_segments(outline_wire):
+        length = vector.Length
+        direction = App.Vector(vector).normalize()
+        along = max(0.0, min(length, direction.dot(switch_position.sub(start))))
+        closest = start.add(direction * along)
+        distance = switch_position.sub(closest).Length
+        if best is None or distance < best[0]:
+            best = (distance, closest, direction)
+    _distance, center_on_edge, direction = best
+    outward = direction.cross(up)
+    outline_box = outline_wire.BoundBox
+    outline_center = App.Vector(
+        (outline_box.XMin + outline_box.XMax) / 2.0,
+        (outline_box.YMin + outline_box.YMax) / 2.0,
+        center_on_edge.z,
+    )
+    if outward.dot(center_on_edge.sub(outline_center)) < 0:
+        outward = outward.negative()
+
+    half_width = POWER_SWITCH_NOTCH_WIDTH_MM / 2.0
+    inner = -0.5  # start inside the cavity, across the gap
+    outer = gap + wall + 0.5
+    base = center_on_edge.add(up * (depth - POWER_SWITCH_NOTCH_DEPTH_MM))
+    corners = [
+        base.add(direction * -half_width).add(outward * inner),
+        base.add(direction * half_width).add(outward * inner),
+        base.add(direction * half_width).add(outward * outer),
+        base.add(direction * -half_width).add(outward * outer),
+    ]
+    cutter = Part.Face(Part.makePolygon(corners + [corners[0]])).extrude(
+        up * (POWER_SWITCH_NOTCH_DEPTH_MM + 1.0)
+    )
+    volume_before = tray.Volume
+    result = tray.cut(cutter)
+    if not result.isValid() or len(result.Solids) != 1:
+        raise SystemExit("error: cutting the switch notch broke the solid")
+    if result.Volume >= volume_before:
+        raise SystemExit("error: the switch notch removed no material")
+    wall_probe = center_on_edge.add(outward * (gap + wall / 2.0)).add(
+        up * (depth - 0.1)
+    )
+    if result.Solids[0].isInside(wall_probe, 1e-6, True):
+        raise SystemExit("error: the switch notch did not open the wall rim")
+    return result, center_on_edge
+
+
 def build_tray(outline_wire, up, gap, wall, floor, depth, ledge_width, ledge_height):
     # Both walls are built from the sharpened outline so every corner
     # can carry a chosen radius. Each bend, convex or concave, gets the
@@ -550,6 +621,21 @@ def main():
         arguments.standoff_diameter,
         arguments.standoff_hole_diameter,
     )
+    switch_by_name = component_positions(re.compile(re.escape(POWER_SWITCH_NAME)))
+    if POWER_SWITCH_NAME not in switch_by_name:
+        raise SystemExit(
+            f"error: power switch '{POWER_SWITCH_NAME}' not found in the "
+            "board sources"
+        )
+    tray, notch_center = cut_switch_notch(
+        tray,
+        resting_face.OuterWire,
+        up,
+        switch_by_name[POWER_SWITCH_NAME],
+        arguments.gap,
+        arguments.wall,
+        arguments.depth,
+    )
     mesh = export_stl(tray, arguments.stl_file)
 
     board_box = board_shape.BoundBox
@@ -572,6 +658,9 @@ def main():
         print(f"ledge:      {arguments.ledge_width} mm wide along the cavity wall, "
               f"{arguments.standoff_height} mm tall, "
               f"{arguments.ledge_width - arguments.gap:.2f} mm under the board edge")
+    print(f"notch:      {POWER_SWITCH_NOTCH_WIDTH_MM} x "
+          f"{POWER_SWITCH_NOTCH_DEPTH_MM} mm rim cut for {POWER_SWITCH_NAME} "
+          f"at the wall segment near ({notch_center.x:.2f}, {notch_center.y:.2f})")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 

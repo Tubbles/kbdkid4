@@ -38,6 +38,7 @@ import Part
 
 from board_step import (
     MOUNTING_HOLE_DIAMETER_MM,
+    component_positions,
     export_stl,
     find_board,
     import_assembly,
@@ -62,8 +63,6 @@ SCREW_HEAD_CLEARANCE_MM = 0.4  # extra so a printed hole clears the head
 # board's key switch positions (a pure translation; anything else is
 # rejected). The switch positions come from the board sources, since
 # the STEP carries no switch bodies.
-BOARD_LP_FILE = "boards/default/board.lp"
-CIRCUIT_LP_FILE = "circuit/circuit.lp"
 SWITCH_NAME_PATTERN = re.compile(r"S[0-9]{3}")  # this project's key switches
 ALIGNMENT_RESIDUAL_LIMIT_MM = 0.05
 
@@ -134,31 +133,9 @@ def load_plate(fcstd_file):
     return shape
 
 
-def switch_positions(board_lp_file, circuit_lp_file):
-    """The board's key switch positions, joined from the board layout
-    (device positions by component UUID) and the circuit (component
-    names by UUID)."""
-    circuit = open(circuit_lp_file).read()
-    board = open(board_lp_file).read()
-    names = {}
-    for match in re.finditer(
-        r"\(component ([0-9a-f-]{36})(.*?)\(name \"([^\"]+)\"\)", circuit, re.S
-    ):
-        names[match.group(1)] = match.group(3)
-    positions = {}
-    for match in re.finditer(
-        r"\(device ([0-9a-f-]{36})\s.*?\(position ([0-9.-]+) ([0-9.-]+)\)",
-        board,
-        re.S,
-    ):
-        positions[match.group(1)] = App.Vector(
-            float(match.group(2)), float(match.group(3)), 0.0
-        )
-    found = [
-        positions[uuid]
-        for uuid, name in names.items()
-        if SWITCH_NAME_PATTERN.fullmatch(name) and uuid in positions
-    ]
+def key_switch_positions():
+    """The board's key switch positions, from the board sources."""
+    found = list(component_positions(SWITCH_NAME_PATTERN).values())
     if not found:
         raise SystemExit(
             f"error: no placed switches matching "
@@ -311,7 +288,7 @@ def main():
     )
 
     plate = load_plate(arguments.fcstd_file)
-    switches = switch_positions(BOARD_LP_FILE, CIRCUIT_LP_FILE)
+    switches = key_switch_positions()
     alignment = board_alignment_offset(plate, switches)
     plate.translate(alignment)
     plate = trim_outer_edges(plate, PLATE_EDGE_TRIM_MM)
