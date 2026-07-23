@@ -59,7 +59,9 @@ inward. Set ledge_width to 0 to build without a ledge.
 The battery switch (POWER_SWITCH_NAME, located via the board sources
 since it has no 3D model in the STEP) protrudes past the board
 outline, so the wall gets a notch cut down from the rim over the
-outline segment nearest the switch.
+outline segment nearest the switch. The neighbouring segment on the
+north side gets the same treatment over its whole length, letting the
+USB cable come in from the top down to the microcontroller.
 
 The design values live in the constants right below this docstring;
 everything else derives from them.
@@ -109,6 +111,16 @@ DEFAULT_LEDGE_WIDTH_MM = 1.0  # PCB support ledge from the cavity wall (0 disabl
 POWER_SWITCH_NAME = "S1"
 POWER_SWITCH_NOTCH_DEPTH_MM = 3.2  # cut down from the rim
 POWER_SWITCH_NOTCH_WIDTH_MM = 9.3  # along the wall, the whole segment
+
+# The USB cable comes in over the outline segment north of the switch
+# segment, down to the nice!nano below it, so that rim gets the same
+# treatment over the whole neighbouring segment. The width derives from
+# the segment; the notch reaches past the corner shared with the switch
+# notch so the two openings merge instead of leaving a sliver tooth,
+# and just past the far corner round's sharpened end.
+USB_NOTCH_DEPTH_MM = 3.2
+USB_NOTCH_PAST_SHARED_CORNER_MM = 1.0
+USB_NOTCH_PAST_FAR_CORNER_MM = 0.5
 
 # Implementation tuning, rarely worth touching.
 CORNER_FIT_SAFETY = 0.95  # margin on the largest corner radius that fits
@@ -426,24 +438,28 @@ def add_standoffs(
     return result
 
 
-def cut_switch_notch(tray, outline_wire, up, switch_position, gap, wall, depth):
-    """Open a notch in the wall's rim over the outline segment nearest
-    the power switch, which protrudes past the board outline there.
-
-    The cut spans the full wall thickness, POWER_SWITCH_NOTCH_WIDTH_MM
-    along the wall centered on the switch's projection onto the
-    segment, POWER_SWITCH_NOTCH_DEPTH_MM down from the rim.
-    """
+def nearest_outline_segment(segments, position):
+    """(index, closest point on segment, direction) of the outline
+    segment nearest a position."""
     best = None
-    for start, vector in outline_straight_segments(outline_wire):
+    for index, (start, vector) in enumerate(segments):
         length = vector.Length
         direction = App.Vector(vector).normalize()
-        along = max(0.0, min(length, direction.dot(switch_position.sub(start))))
+        along = max(0.0, min(length, direction.dot(position.sub(start))))
         closest = start.add(direction * along)
-        distance = switch_position.sub(closest).Length
+        distance = position.sub(closest).Length
         if best is None or distance < best[0]:
-            best = (distance, closest, direction)
-    _distance, center_on_edge, direction = best
+            best = (distance, index, closest, direction)
+    return best[1], best[2], best[3]
+
+
+def cut_rim_notch(
+    tray, outline_wire, up, center_on_edge, direction, width, notch_depth,
+    gap, wall, depth, label,
+):
+    """Open a notch in the wall's rim: `width` along the wall centered
+    on `center_on_edge`, `notch_depth` down from the rim, spanning the
+    full wall thickness."""
     outward = direction.cross(up)
     outline_box = outline_wire.BoundBox
     outline_center = App.Vector(
@@ -454,10 +470,10 @@ def cut_switch_notch(tray, outline_wire, up, switch_position, gap, wall, depth):
     if outward.dot(center_on_edge.sub(outline_center)) < 0:
         outward = outward.negative()
 
-    half_width = POWER_SWITCH_NOTCH_WIDTH_MM / 2.0
+    half_width = width / 2.0
     inner = -0.5  # start inside the cavity, across the gap
     outer = gap + wall + 0.5
-    base = center_on_edge.add(up * (depth - POWER_SWITCH_NOTCH_DEPTH_MM))
+    base = center_on_edge.add(up * (depth - notch_depth))
     corners = [
         base.add(direction * -half_width).add(outward * inner),
         base.add(direction * half_width).add(outward * inner),
@@ -465,20 +481,20 @@ def cut_switch_notch(tray, outline_wire, up, switch_position, gap, wall, depth):
         base.add(direction * -half_width).add(outward * outer),
     ]
     cutter = Part.Face(Part.makePolygon(corners + [corners[0]])).extrude(
-        up * (POWER_SWITCH_NOTCH_DEPTH_MM + 1.0)
+        up * (notch_depth + 1.0)
     )
     volume_before = tray.Volume
     result = tray.cut(cutter)
     if not result.isValid() or len(result.Solids) != 1:
-        raise SystemExit("error: cutting the switch notch broke the solid")
+        raise SystemExit(f"error: cutting the {label} notch broke the solid")
     if result.Volume >= volume_before:
-        raise SystemExit("error: the switch notch removed no material")
+        raise SystemExit(f"error: the {label} notch removed no material")
     wall_probe = center_on_edge.add(outward * (gap + wall / 2.0)).add(
         up * (depth - 0.1)
     )
     if result.Solids[0].isInside(wall_probe, 1e-6, True):
-        raise SystemExit("error: the switch notch did not open the wall rim")
-    return result, center_on_edge
+        raise SystemExit(f"error: the {label} notch did not open the wall rim")
+    return result
 
 
 def build_tray(outline_wire, up, gap, wall, floor, depth, ledge_width, ledge_height):
@@ -627,14 +643,67 @@ def main():
             f"error: power switch '{POWER_SWITCH_NAME}' not found in the "
             "board sources"
         )
-    tray, notch_center = cut_switch_notch(
+    segments = outline_straight_segments(resting_face.OuterWire)
+    switch_index, switch_notch_center, switch_direction = nearest_outline_segment(
+        segments, switch_by_name[POWER_SWITCH_NAME]
+    )
+    tray = cut_rim_notch(
         tray,
         resting_face.OuterWire,
         up,
-        switch_by_name[POWER_SWITCH_NAME],
+        switch_notch_center,
+        switch_direction,
+        POWER_SWITCH_NOTCH_WIDTH_MM,
+        POWER_SWITCH_NOTCH_DEPTH_MM,
         arguments.gap,
         arguments.wall,
         arguments.depth,
+        "switch",
+    )
+
+    def segment_midpoint(segment):
+        start, vector = segment
+        return start.add(vector * 0.5)
+
+    neighbours = [
+        segments[(switch_index - 1) % len(segments)],
+        segments[(switch_index + 1) % len(segments)],
+    ]
+    usb_segment = max(neighbours, key=lambda segment: segment_midpoint(segment).y)
+    usb_start, usb_vector = usb_segment
+    usb_direction = App.Vector(usb_vector).normalize()
+    usb_end = usb_start.add(usb_vector)
+    if switch_notch_center.sub(usb_end).Length < switch_notch_center.sub(usb_start).Length:
+        usb_start = usb_end
+        usb_direction = usb_direction.negative()
+    usb_width = (
+        usb_vector.Length
+        + USB_NOTCH_PAST_SHARED_CORNER_MM
+        + USB_NOTCH_PAST_FAR_CORNER_MM
+    )
+    usb_notch_center = usb_start.add(
+        usb_direction
+        * (
+            (
+                usb_vector.Length
+                + USB_NOTCH_PAST_FAR_CORNER_MM
+                - USB_NOTCH_PAST_SHARED_CORNER_MM
+            )
+            / 2.0
+        )
+    )
+    tray = cut_rim_notch(
+        tray,
+        resting_face.OuterWire,
+        up,
+        usb_notch_center,
+        usb_direction,
+        usb_width,
+        USB_NOTCH_DEPTH_MM,
+        arguments.gap,
+        arguments.wall,
+        arguments.depth,
+        "usb",
     )
     mesh = export_stl(tray, arguments.stl_file)
 
@@ -660,7 +729,12 @@ def main():
               f"{arguments.ledge_width - arguments.gap:.2f} mm under the board edge")
     print(f"notch:      {POWER_SWITCH_NOTCH_WIDTH_MM} x "
           f"{POWER_SWITCH_NOTCH_DEPTH_MM} mm rim cut for {POWER_SWITCH_NAME} "
-          f"at the wall segment near ({notch_center.x:.2f}, {notch_center.y:.2f})")
+          f"at the wall segment near ({switch_notch_center.x:.2f}, "
+          f"{switch_notch_center.y:.2f})")
+    print(f"notch:      {usb_width:.1f} x {USB_NOTCH_DEPTH_MM} mm rim cut "
+          f"for the USB cable over the whole neighbouring segment near "
+          f"({usb_notch_center.x:.2f}, {usb_notch_center.y:.2f}), merged with "
+          f"the switch notch")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
