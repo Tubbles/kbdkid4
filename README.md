@@ -14,7 +14,9 @@ Generated outputs (gerbers, BOM, schematic and assembly PDFs, STEP model) live i
     docker run --rm -v "$PWD":/work -w /work freecad-headless \
         freecadcmd scripts/export_tray.py --pass output/v1/kbdkid4_v1.step tray.stl [key=value ...] [flip]
 
-The parameters (gap, wall, floor, height, standoff dimensions) and their defaults are listed in the script's usage header and constants block.
+The parameters (gap, wall, floor, depth, standoff and ledge dimensions) and their defaults are listed in the script's usage header and constants block.
+
+`scripts/export_plate.py` likewise exports the switch plate: the kbdkid3 plate model (`resources/kbdkid3-plate-left.FCStd`) drilled with through holes at the board's mounting drills. Only the left plate is exported; both it and the tray get mirrored in the slicer for the other keyboard half. CI uploads it as the `plate-stl` artifact.
 
 CI runs this against the freshly generated STEP and uploads the result as the `tray-stl` workflow artifact.
 

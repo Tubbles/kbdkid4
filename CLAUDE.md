@@ -18,18 +18,20 @@ LibrePCB project for kbdkid4, a split wireless keyboard. The `.lp` S-expression 
 
 Parameters and their defaults live in the constants block at the top of the script; the usage header lists the key=value override names.
 
-The script locates the board without hardcoded face indices: by the `PCB` assembly label (a constant in LibrePCB's `stepexport.cpp`), validated geometrically, with a geometry-only fallback. Its module docstring documents the freecadcmd quirks that shaped it (exit codes swallowed, `__name__` set to the file stem, scripts run twice, dash-arguments intercepted even after `--pass`, hence the `key=value` argument style and `os._exit`). Read that docstring before writing any new FreeCAD script here.
+`scripts/export_plate.py` exports the switch plate the same way: the kbdkid3 plate model (`resources/kbdkid3-plate-left.FCStd`, a parametric switch cell replicated by a point array, with a mirrored right plate that is not exported) drilled with through holes at the board's mounting drills.
+
+Shared machinery lives in `scripts/board_step.py`: locating the board without hardcoded face indices (by the `PCB` assembly label, a constant in LibrePCB's `stepexport.cpp`, validated geometrically, with a geometry-only fallback), mounting drill detection, and the freecadcmd scaffolding. Its module docstring documents the freecadcmd quirks (exit codes swallowed, `__name__` set to the file stem, scripts run twice, dash-arguments intercepted even after `--pass`, hence the `key=value` argument style and `os._exit`). Read that docstring before writing any new FreeCAD script here.
 
 The STL's Z orientation is not critical: the tray is mirrored in the slicer anyway, since the split keyboard needs both mirrored halves.
 
 ## CI
 
-`.github/workflows/ci.yml` has two jobs: `outputs` runs the `Tubbles/librepcb-ci@v1` action (regenerates all output jobs with librepcb-cli, uploads them as the `librepcb-ci-outputs` artifact, publishes browsable outputs to GitHub Pages; ERC/DRC checks are non-fatal), and `tray` downloads that artifact, builds the FreeCAD image, runs the tray export on every generated `.step`, and uploads the result as the `tray-stl` artifact.
+`.github/workflows/ci.yml` has two jobs: `outputs` runs the `Tubbles/librepcb-ci@v1` action (regenerates all output jobs with librepcb-cli, uploads them as the `librepcb-ci-outputs` artifact, publishes browsable outputs to GitHub Pages; ERC/DRC checks are non-fatal), and `tray` downloads that artifact, builds the FreeCAD image, runs the tray and plate exports on every generated `.step`, and uploads the results as the `tray-stl` and `plate-stl` artifacts.
 
 ## Conventions
 
 - Commit and push completed changes without asking. Keep commits small and focused.
 - `tmp/` is untracked scratch space; `work/` holds design notes and is not committed.
-- Test any change to `scripts/export_tray.py` by running it in the container against `output/v1/kbdkid4_v1.step` and checking the exit code; freecadcmd hides Python failures unless the script exits via `os._exit`.
+- Test any change to the export scripts by running them in the container against `output/v1/kbdkid4_v1.step` and checking the exit code; freecadcmd hides Python failures unless the script exits via `os._exit`.
 - `boards/default/board.lp` is the design ground truth (outline polygon vertices, board-level mounting drills). Cross-check what the script detects from the STEP against it rather than trusting either alone.
-- To inspect geometry beyond the exit code, exec the script source with its trailing `run_and_exit()` line stripped (a plain import would run main and `os._exit` the interpreter), then drive its functions directly: census cylinder-face radii, sample wall thickness with `distToShape`, compare volumes against analytic values.
+- To inspect geometry beyond the exit code: `board_step.py` can be imported normally (put `scripts/` on `sys.path`), but the export scripts must be exec'd with their trailing `run_and_exit(main)` line stripped and `__file__` predefined (a plain import would run main and `os._exit` the interpreter). Then drive their functions directly: census cylinder-face radii, sample wall thickness with `distToShape`, compare volumes against analytic values.

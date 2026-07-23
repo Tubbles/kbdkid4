@@ -52,3 +52,19 @@ jobs:
           name: tray-stl
           path: tray/
           if-no-files-found: error
+      - name: Export plate STL
+        run: |
+          shopt -s globstar nullglob
+          mkdir -p plate
+          for step_file in librepcb-ci-output/**/*.step; do
+            stl_file="plate/$(basename "${step_file%.step}")_Plate.stl"
+            docker run --rm -v "$PWD":/work -w /work freecad-headless \
+              freecadcmd scripts/export_plate.py --pass "$step_file" \
+              resources/kbdkid3-plate-left.FCStd "$stl_file"
+          done
+      - name: Upload plate STL
+        uses: actions/upload-artifact@v4
+        with:
+          name: plate-stl
+          path: plate/
+          if-no-files-found: error
