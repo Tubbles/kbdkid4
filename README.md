@@ -16,7 +16,7 @@ Generated outputs (gerbers, BOM, schematic and assembly PDFs, STEP model) live i
 
 The parameters (gap, wall, floor, depth, standoff and ledge dimensions) and their defaults are listed in the script's usage header and constants block.
 
-`scripts/export_plate.py` likewise exports the switch plate: the kbdkid3 plate model (`resources/kbdkid3-plate-left.FCStd`) drilled at the board's mounting drills, in two variants: `_Plate.stl` with thread-sized holes (screws pass through the plate) and `_PlateOverScrews.stl` with head-sized holes (screws clamp the PCB, plate on top). Only the left plate is exported; both it and the tray get mirrored in the slicer for the other keyboard half. CI uploads both as the `plate-stl` artifact.
+`scripts/export_plate.py` likewise exports the switch plate: the kbdkid3 plate model (`resources/kbdkid3-plate-left.FCStd`), aligned onto the board by matching its switch cutouts to the board's switch grid, trimmed at the outer edges to fit the tray, and drilled at the board's mounting drills, in two variants: `_Plate.stl` with thread-sized holes (screws pass through the plate) and `_PlateOverScrews.stl` with head-sized holes (screws clamp the PCB, plate on top). Only the left plate is exported; both it and the tray get mirrored in the slicer for the other keyboard half. CI uploads both as the `plate-stl` artifact.
 
 CI runs this against the freshly generated STEP and uploads the result as the `tray-stl` workflow artifact.
 

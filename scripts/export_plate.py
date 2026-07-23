@@ -5,6 +5,12 @@ replicated by a point array into the left plate, with a mirrored right
 plate alongside in the same document. Only the left plate is exported;
 the right half is mirrored in the slicer, like the tray.
 
+The kbdkid3 plate does not share the kbdkid4 board's origin. The
+script aligns it by matching the plate's switch cutout centers to the
+board's key switch positions (parsed from the board sources), refusing
+anything but a pure translation, and then trims the plate's outer
+edges so it fits the tray.
+
 Plain through holes for the mounting screws are drilled where the
 board has its mounting drills, detected in the kbdkid4 STEP exactly
 like the tray places its standoffs, so the plate holes always track
@@ -21,6 +27,7 @@ for the freecadcmd quirks that shape the invocation):
 
 import math
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -34,6 +41,7 @@ from board_step import (
     find_board,
     import_assembly,
     mounting_hole_centers,
+    offset_outline,
     pick_resting_face,
     run_and_exit,
     script_arguments,
@@ -48,8 +56,24 @@ PLATE_OBJECT_NAME = "PointArray"
 SCREW_HEAD_DIAMETER_MM = 3.77  # measured
 SCREW_HEAD_CLEARANCE_MM = 0.4  # extra so a printed hole clears the head
 
-# A hole whose rim has less than this much plate material around it
-# indicates the plate and board frames do not line up.
+# The kbdkid3 plate does not share the kbdkid4 board's origin, so the
+# script aligns it by matching the plate's switch cutout centers to the
+# board's key switch positions (a pure translation; anything else is
+# rejected). The switch positions come from the board sources, since
+# the STEP carries no switch bodies.
+BOARD_LP_FILE = "boards/default/board.lp"
+CIRCUIT_LP_FILE = "circuit/circuit.lp"
+SWITCH_NAME_PATTERN = re.compile(r"S[0-9]{3}")  # this project's key switches
+ALIGNMENT_RESIDUAL_LIMIT_MM = 0.05
+
+# The reused plate overhangs the tray; trim its outer edges to fit.
+PLATE_EDGE_TRIM_MM = 0.6
+
+# Positions with less plate material than this get no hole: the frame
+# alignment is already guaranteed by the switch grid match, so low
+# support means the position genuinely sits in open plate area (one
+# mounting position lands at a four-cell junction cutout) and the
+# screw there simply passes the plate without engaging it.
 MINIMUM_HOLE_SUPPORT = 0.5
 
 USAGE = f"""\
@@ -109,6 +133,132 @@ def load_plate(fcstd_file):
     return shape
 
 
+def switch_positions(board_lp_file, circuit_lp_file):
+    """The board's key switch positions, joined from the board layout
+    (device positions by component UUID) and the circuit (component
+    names by UUID)."""
+    circuit = open(circuit_lp_file).read()
+    board = open(board_lp_file).read()
+    names = {}
+    for match in re.finditer(
+        r"\(component ([0-9a-f-]{36})(.*?)\(name \"([^\"]+)\"\)", circuit, re.S
+    ):
+        names[match.group(1)] = match.group(3)
+    positions = {}
+    for match in re.finditer(
+        r"\(device ([0-9a-f-]{36})\s.*?\(position ([0-9.-]+) ([0-9.-]+)\)",
+        board,
+        re.S,
+    ):
+        positions[match.group(1)] = App.Vector(
+            float(match.group(2)), float(match.group(3)), 0.0
+        )
+    found = [
+        positions[uuid]
+        for uuid, name in names.items()
+        if SWITCH_NAME_PATTERN.fullmatch(name) and uuid in positions
+    ]
+    if not found:
+        raise SystemExit(
+            f"error: no placed switches matching "
+            f"'{SWITCH_NAME_PATTERN.pattern}' found in the board sources"
+        )
+    return found
+
+
+def cutout_centers(plate):
+    """Center of each cell's switch cutout: the inner boundary of the
+    cell's top face."""
+    centers = []
+    for solid in plate.Solids:
+        for face in solid.Faces:
+            surface = face.Surface
+            if not isinstance(surface, Part.Plane):
+                continue
+            normal = face.normalAt(*surface.parameter(face.CenterOfMass))
+            if normal.z < 0.999:
+                continue
+            inner_wires = [
+                wire for wire in face.Wires if not wire.isSame(face.OuterWire)
+            ]
+            if not inner_wires:
+                continue
+            xs = []
+            ys = []
+            for wire in inner_wires:
+                box = wire.BoundBox
+                xs.extend([box.XMin, box.XMax])
+                ys.extend([box.YMin, box.YMax])
+            centers.append(
+                App.Vector((min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0, 0.0)
+            )
+            break
+    if not centers:
+        raise SystemExit("error: no switch cutouts found in the plate")
+    return centers
+
+
+def board_alignment_offset(plate, switches):
+    """The translation that puts the plate in the board's frame, found
+    by matching every switch cutout to its nearest switch position.
+
+    The match must be a pure translation: all cutouts have to agree on
+    the offset within ALIGNMENT_RESIDUAL_LIMIT_MM.
+    """
+    deltas = []
+    for center in cutout_centers(plate):
+        nearest = min(switches, key=lambda position: position.sub(center).Length)
+        deltas.append(nearest.sub(center))
+    mean = App.Vector(
+        sum(delta.x for delta in deltas) / len(deltas),
+        sum(delta.y for delta in deltas) / len(deltas),
+        0.0,
+    )
+    worst = max(delta.sub(mean).Length for delta in deltas)
+    if worst > ALIGNMENT_RESIDUAL_LIMIT_MM:
+        raise SystemExit(
+            f"error: plate cutouts do not match the board's switch grid by "
+            f"a pure translation (worst residual {worst:.3f} mm)"
+        )
+    return mean
+
+
+def trim_outer_edges(plate, trim):
+    """Shrink the plate's outer silhouette by `trim` on all outer
+    edges, leaving the cutouts untouched."""
+    silhouette = plate.Solids[0].multiFuse(plate.Solids[1:]).removeSplitter()
+    bottom = silhouette.BoundBox.ZMin
+    bottom_faces = [
+        face
+        for face in silhouette.Faces
+        if isinstance(face.Surface, Part.Plane)
+        and abs(face.BoundBox.ZMin - bottom) < 0.001
+        and abs(face.BoundBox.ZMax - bottom) < 0.001
+    ]
+    if len(bottom_faces) != 1:
+        raise SystemExit(
+            f"error: expected one plate bottom face, found {len(bottom_faces)}"
+        )
+    outline = offset_outline(bottom_faces[0].OuterWire, -trim)
+    keep_prism = Part.Face(outline).extrude(
+        App.Vector(0, 0, silhouette.BoundBox.ZLength + 2.0)
+    )
+    keep_prism.translate(App.Vector(0, 0, -1.0))
+    trimmed = plate.common(keep_prism)
+    old_box = plate.BoundBox
+    new_box = trimmed.BoundBox
+    for old_length, new_length in (
+        (old_box.XLength, new_box.XLength),
+        (old_box.YLength, new_box.YLength),
+    ):
+        if abs(old_length - new_length - 2.0 * trim) > 0.01:
+            raise SystemExit(
+                f"error: edge trim changed a plate side from {old_length:.2f} "
+                f"to {new_length:.2f} mm, expected minus {2.0 * trim:.2f} mm"
+            )
+    return trimmed
+
+
 def drill_holes(plate, hole_centers, hole_diameter):
     """Cut a plain through hole at each center and return the drilled
     plate along with each hole's material support fraction.
@@ -128,14 +278,9 @@ def drill_holes(plate, hole_centers, hole_diameter):
             App.Vector(0, 0, 1),
         )
         support = plate.common(drill).Volume / full_volume
-        if support < MINIMUM_HOLE_SUPPORT:
-            raise SystemExit(
-                f"error: hole at ({center.x:.3f}, {center.y:.3f}) has only "
-                f"{support * 100.0:.0f} % plate material around it; the "
-                "plate and board frames probably do not line up"
-            )
-        drills.append(drill)
         supports.append(support)
+        if support >= MINIMUM_HOLE_SUPPORT:
+            drills.append(drill)
     volume_before = plate.Volume
     removed_volume = plate.common(Part.makeCompound(drills)).Volume
     drilled = plate.cut(Part.makeCompound(drills))
@@ -164,6 +309,10 @@ def main():
     )
 
     plate = load_plate(arguments.fcstd_file)
+    switches = switch_positions(BOARD_LP_FILE, CIRCUIT_LP_FILE)
+    alignment = board_alignment_offset(plate, switches)
+    plate.translate(alignment)
+    plate = trim_outer_edges(plate, PLATE_EDGE_TRIM_MM)
     box = plate.BoundBox
     plate, supports = drill_holes(plate, hole_centers, arguments.hole_diameter)
     mesh = export_stl(plate, arguments.stl_file)
@@ -172,9 +321,17 @@ def main():
     print(f"plate:      '{PLATE_OBJECT_NAME}' from {arguments.fcstd_file}, "
           f"{box.XLength:.2f} x {box.YLength:.2f} x {box.ZLength:.2f} mm, "
           f"{len(plate.Solids)} solids")
+    print(f"aligned:    moved ({alignment.x:+.3f}, {alignment.y:+.3f}) mm onto the "
+          f"board's switch grid ({len(switches)} switches), outer edges "
+          f"trimmed {PLATE_EDGE_TRIM_MM} mm")
     for center, support in zip(hole_centers, supports):
-        print(f"hole:       ({center.x:9.4f}, {center.y:8.4f}) "
-              f"{arguments.hole_diameter} mm, {support * 100.0:5.1f} % supported")
+        if support >= MINIMUM_HOLE_SUPPORT:
+            print(f"hole:       ({center.x:9.4f}, {center.y:8.4f}) "
+                  f"{arguments.hole_diameter} mm, {support * 100.0:5.1f} % supported")
+        else:
+            print(f"hole:       ({center.x:9.4f}, {center.y:8.4f}) skipped, only "
+                  f"{support * 100.0:.0f} % plate material there (open plate "
+                  f"area, the screw passes the plate without engaging it)")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 

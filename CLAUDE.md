@@ -18,7 +18,7 @@ LibrePCB project for kbdkid4, a split wireless keyboard. The `.lp` S-expression 
 
 Parameters and their defaults live in the constants block at the top of the script; the usage header lists the key=value override names.
 
-`scripts/export_plate.py` exports the switch plate the same way: the kbdkid3 plate model (`resources/kbdkid3-plate-left.FCStd`, a parametric switch cell replicated by a point array, with a mirrored right plate that is not exported) drilled with through holes at the board's mounting drills.
+`scripts/export_plate.py` exports the switch plate the same way: the kbdkid3 plate model (`resources/kbdkid3-plate-left.FCStd`, a parametric switch cell replicated by a point array, with a mirrored right plate that is not exported) drilled with through holes at the board's mounting drills. The kbdkid3 plate does not share the kbdkid4 board's origin; the script aligns it by matching the plate's cutout centers against the switch positions parsed from `board.lp` and `circuit.lp`, accepting only a pure translation.
 
 Shared machinery lives in `scripts/board_step.py`: locating the board without hardcoded face indices (by the `PCB` assembly label, a constant in LibrePCB's `stepexport.cpp`, validated geometrically, with a geometry-only fallback), mounting drill detection, and the freecadcmd scaffolding. Its module docstring documents the freecadcmd quirks (exit codes swallowed, `__name__` set to the file stem, scripts run twice, dash-arguments intercepted even after `--pass`, hence the `key=value` argument style and `os._exit`). Read that docstring before writing any new FreeCAD script here.
 

@@ -76,6 +76,7 @@ from board_step import (
     find_board,
     import_assembly,
     mounting_hole_centers,
+    offset_outline,
     pick_resting_face,
     run_and_exit,
     script_arguments,
@@ -193,27 +194,6 @@ def projected_interval(bound_box, axis):
         for z in (bound_box.ZMin, bound_box.ZMax)
     ]
     return min(values), max(values)
-
-
-def offset_outline(wire, distance):
-    """Offset a closed wire by `distance` with sharp corners (join type
-    2, corners extended to their intersection): positive is outward,
-    negative inward. makeOffset2D's own sign follows the wire's
-    orientation, so pick the candidate whose area moved the right way.
-    """
-    original_area = Part.Face(wire).Area
-    wants_growth = distance > 0
-
-    def moved_correctly(candidate_wire):
-        area = Part.Face(candidate_wire).Area
-        return area > original_area if wants_growth else area < original_area
-
-    candidate = wire.makeOffset2D(distance, 2)
-    if not moved_correctly(candidate):
-        candidate = wire.makeOffset2D(-distance, 2)
-    if not moved_correctly(candidate):
-        raise SystemExit(f"error: offsetting the outline by {distance} mm failed")
-    return candidate
 
 
 def outline_straight_segments(outline_wire):
