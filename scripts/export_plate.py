@@ -68,7 +68,7 @@ SWITCH_NAME_PATTERN = re.compile(r"S[0-9]{3}")  # this project's key switches
 ALIGNMENT_RESIDUAL_LIMIT_MM = 0.05
 
 # The reused plate overhangs the tray; trim its outer edges to fit.
-PLATE_EDGE_TRIM_MM = 0.6
+PLATE_EDGE_TRIM_MM = 0.4
 
 # Below this much surrounding plate material a cut is a clearance
 # cutout in mostly open plate area rather than a supported screw hole
