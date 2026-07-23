@@ -57,10 +57,13 @@ jobs:
           shopt -s globstar nullglob
           mkdir -p plate
           for step_file in librepcb-ci-output/**/*.step; do
-            stl_file="plate/$(basename "${step_file%.step}")_Plate.stl"
+            base="plate/$(basename "${step_file%.step}")"
             docker run --rm -v "$PWD":/work -w /work freecad-headless \
               freecadcmd scripts/export_plate.py --pass "$step_file" \
-              resources/kbdkid3-plate-left.FCStd "$stl_file"
+              resources/kbdkid3-plate-left.FCStd "${base}_Plate.stl"
+            docker run --rm -v "$PWD":/work -w /work freecad-headless \
+              freecadcmd scripts/export_plate.py --pass "$step_file" \
+              resources/kbdkid3-plate-left.FCStd "${base}_PlateOverScrews.stl" heads
           done
       - name: Upload plate STL
         uses: actions/upload-artifact@v4

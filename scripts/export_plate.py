@@ -43,14 +43,23 @@ from board_step import (
 # its mirror and is not exported).
 PLATE_OBJECT_NAME = "PointArray"
 
+# For the variant where the screws clamp the PCB and the plate goes on
+# top of them, the holes must swallow the screw heads instead.
+SCREW_HEAD_DIAMETER_MM = 3.77  # measured
+SCREW_HEAD_CLEARANCE_MM = 0.4  # extra so a printed hole clears the head
+
 # A hole whose rim has less than this much plate material around it
 # indicates the plate and board frames do not line up.
 MINIMUM_HOLE_SUPPORT = 0.5
 
 USAGE = f"""\
 usage: freecadcmd scripts/export_plate.py --pass <pcb.step> <plate.fcstd>
-           <plate.stl> [hole_diameter={MOUNTING_HOLE_DIAMETER_MM}]
+           <plate.stl> [heads] [hole_diameter={MOUNTING_HOLE_DIAMETER_MM}]
 
+  heads          drill for the screw heads instead of the threads, for
+                 the stack where the screws clamp the PCB and the plate
+                 sits above them ({SCREW_HEAD_DIAMETER_MM} + \
+{SCREW_HEAD_CLEARANCE_MM} mm)
   hole_diameter  drill for the mounting screws, mm\
 """
 
@@ -67,7 +76,11 @@ def parse_arguments(argument_list):
     arguments = Arguments()
     positionals = []
     for argument in argument_list:
-        if "=" in argument:
+        if argument == "heads":
+            arguments.hole_diameter = (
+                SCREW_HEAD_DIAMETER_MM + SCREW_HEAD_CLEARANCE_MM
+            )
+        elif "=" in argument:
             key, _, value = argument.partition("=")
             if key != "hole_diameter":
                 raise SystemExit(f"error: unknown option '{key}'\n{USAGE}")
@@ -128,6 +141,15 @@ def drill_holes(plate, hole_centers, hole_diameter):
     drilled = plate.cut(Part.makeCompound(drills))
     if abs(volume_before - drilled.Volume - removed_volume) > 0.001 * volume_before:
         raise SystemExit("error: drilling did not remove the expected volume")
+    # The plate is a compound of touching cell solids and a drill can
+    # sever a narrow web (splitting a cell in two is fine); what must
+    # never happen is a piece losing contact with the rest.
+    fused = drilled.Solids[0].multiFuse(drilled.Solids[1:])
+    if len(fused.Solids) != 1:
+        raise SystemExit(
+            f"error: drilling left {len(fused.Solids)} disconnected plate "
+            "pieces"
+        )
     return drilled, supports
 
 
