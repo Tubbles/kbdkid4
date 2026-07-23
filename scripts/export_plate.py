@@ -14,9 +14,10 @@ edges so it fits the tray.
 Plain through holes for the mounting screws are drilled where the
 board has its mounting drills, detected in the kbdkid4 STEP exactly
 like the tray places its standoffs, so the plate holes always track
-the PCB. The printout reports how much plate material surrounds each
-hole; one position sits at a switch cutout edge of the reused plate,
-so partial support there is expected, not an error.
+the PCB. Every position is cut, even where it sits mostly in open
+plate area (one lands at a four-cell junction cutout): whatever
+sliver of material protrudes into the screw's path must go. The
+printout reports how much plate material surrounds each hole.
 
 Runs headless under FreeCAD's console interpreter (see board_step.py
 for the freecadcmd quirks that shape the invocation):
@@ -69,12 +70,12 @@ ALIGNMENT_RESIDUAL_LIMIT_MM = 0.05
 # The reused plate overhangs the tray; trim its outer edges to fit.
 PLATE_EDGE_TRIM_MM = 0.6
 
-# Positions with less plate material than this get no hole: the frame
-# alignment is already guaranteed by the switch grid match, so low
-# support means the position genuinely sits in open plate area (one
-# mounting position lands at a four-cell junction cutout) and the
-# screw there simply passes the plate without engaging it.
-MINIMUM_HOLE_SUPPORT = 0.5
+# Below this much surrounding plate material a cut is a clearance
+# cutout in mostly open plate area rather than a supported screw hole
+# (one mounting position lands at a four-cell junction cutout). Only
+# affects reporting: every position is cut either way, since whatever
+# sliver protrudes into the screw's path must go.
+SUPPORTED_HOLE_THRESHOLD = 0.5
 
 USAGE = f"""\
 usage: freecadcmd scripts/export_plate.py --pass <pcb.step> <plate.fcstd>
@@ -263,8 +264,11 @@ def drill_holes(plate, hole_centers, hole_diameter):
     """Cut a plain through hole at each center and return the drilled
     plate along with each hole's material support fraction.
 
-    The board frame and the plate frame share the XY plane, so only the
-    centers' x and y matter; the drills span the plate's own z range.
+    Every center is cut regardless of support: a position in mostly
+    open plate area still needs whatever sliver protrudes into the
+    screw's path removed. The plate is already in the board's frame
+    here, so only the centers' x and y matter; the drills span the
+    plate's own z range.
     """
     box = plate.BoundBox
     drills = []
@@ -277,10 +281,8 @@ def drill_holes(plate, hole_centers, hole_diameter):
             App.Vector(center.x, center.y, box.ZMin - 1.0),
             App.Vector(0, 0, 1),
         )
-        support = plate.common(drill).Volume / full_volume
-        supports.append(support)
-        if support >= MINIMUM_HOLE_SUPPORT:
-            drills.append(drill)
+        supports.append(plate.common(drill).Volume / full_volume)
+        drills.append(drill)
     volume_before = plate.Volume
     removed_volume = plate.common(Part.makeCompound(drills)).Volume
     drilled = plate.cut(Part.makeCompound(drills))
@@ -325,13 +327,12 @@ def main():
           f"board's switch grid ({len(switches)} switches), outer edges "
           f"trimmed {PLATE_EDGE_TRIM_MM} mm")
     for center, support in zip(hole_centers, supports):
-        if support >= MINIMUM_HOLE_SUPPORT:
-            print(f"hole:       ({center.x:9.4f}, {center.y:8.4f}) "
-                  f"{arguments.hole_diameter} mm, {support * 100.0:5.1f} % supported")
-        else:
-            print(f"hole:       ({center.x:9.4f}, {center.y:8.4f}) skipped, only "
-                  f"{support * 100.0:.0f} % plate material there (open plate "
-                  f"area, the screw passes the plate without engaging it)")
+        note = ""
+        if support < SUPPORTED_HOLE_THRESHOLD:
+            note = " (mostly open plate area, clearance cut only)"
+        print(f"hole:       ({center.x:9.4f}, {center.y:8.4f}) "
+              f"{arguments.hole_diameter} mm, {support * 100.0:5.1f} % "
+              f"supported{note}")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
