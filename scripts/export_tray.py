@@ -61,7 +61,10 @@ since it has no 3D model in the STEP) protrudes past the board
 outline, so the wall gets a notch cut down from the rim over the
 outline segment nearest the switch. The neighbouring segment on the
 north side gets the same treatment over its whole length, letting the
-USB cable come in from the top down to the microcontroller.
+USB cable come in from the top down to the microcontroller. At the
+merged opening's two outer ends the neighbouring wall slopes down
+into the notch and the crest where the full wall meets the slope is
+rounded.
 
 The design values live in the constants right below this docstring;
 everything else derives from them.
@@ -124,6 +127,12 @@ POWER_SWITCH_NOTCH_WIDTH_MM = 9.3  # along the wall, the whole segment
 USB_NOTCH_DEPTH_MM = 3.2
 USB_NOTCH_PAST_SHARED_CORNER_MM = 2.5
 USB_NOTCH_PAST_FAR_CORNER_MM = 0.5
+
+# At the merged opening's two outer ends the neighbouring wall slopes
+# down into the notch (45 degrees when the ramp equals the notch
+# depth), and the crest where the full wall meets the slope is rounded.
+NOTCH_RAMP_MM = 3.2
+NOTCH_CREST_RADIUS_MM = 1.0
 
 # Implementation tuning, rarely worth touching.
 CORNER_FIT_SAFETY = 0.95  # margin on the largest corner radius that fits
@@ -463,16 +472,7 @@ def cut_rim_notch(
     """Open a notch in the wall's rim: `width` along the wall centered
     on `center_on_edge`, `notch_depth` down from the rim, spanning the
     full wall thickness."""
-    outward = direction.cross(up)
-    outline_box = outline_wire.BoundBox
-    outline_center = App.Vector(
-        (outline_box.XMin + outline_box.XMax) / 2.0,
-        (outline_box.YMin + outline_box.YMax) / 2.0,
-        center_on_edge.z,
-    )
-    if outward.dot(center_on_edge.sub(outline_center)) < 0:
-        outward = outward.negative()
-
+    outward = notch_outward(outline_wire, center_on_edge, direction, up)
     half_width = width / 2.0
     inner = -0.5  # start inside the cavity, across the gap
     outer = gap + wall + 0.5
@@ -498,6 +498,80 @@ def cut_rim_notch(
     if result.Solids[0].isInside(wall_probe, 1e-6, True):
         raise SystemExit(f"error: the {label} notch did not open the wall rim")
     return result
+
+
+def notch_outward(outline_wire, center_on_edge, direction, up):
+    """The horizontal direction pointing out of the board at a point on
+    the outline, perpendicular to the wall direction there."""
+    outward = direction.cross(up)
+    outline_box = outline_wire.BoundBox
+    outline_center = App.Vector(
+        (outline_box.XMin + outline_box.XMax) / 2.0,
+        (outline_box.YMin + outline_box.YMax) / 2.0,
+        center_on_edge.z,
+    )
+    if outward.dot(center_on_edge.sub(outline_center)) < 0:
+        outward = outward.negative()
+    return outward
+
+
+def cut_notch_ramp(
+    tray, outline_wire, up, end_on_outline, away, gap, wall, depth,
+    notch_depth, label,
+):
+    """Slope the wall down into a notch end and round the crest.
+
+    Cuts a wedge so the neighbouring wall descends from full height
+    (NOTCH_RAMP_MM away from the notch end) to the notch floor, then
+    fillets the crest edge where the full-height rim meets the slope
+    with NOTCH_CREST_RADIUS_MM. Returns (tray, crest_rounded).
+    """
+    outward = notch_outward(outline_wire, end_on_outline, away, up)
+    inner = -0.5
+    outer = gap + wall + 2.0  # wide, the wall may bend within the ramp
+    floor_z = depth - notch_depth
+    profile = [
+        end_on_outline.add(up * floor_z),
+        end_on_outline.add(up * (depth + 1.0)),
+        end_on_outline.add(away * NOTCH_RAMP_MM).add(up * (depth + 1.0)),
+        end_on_outline.add(away * NOTCH_RAMP_MM).add(up * depth),
+    ]
+    face = Part.Face(Part.makePolygon(profile + [profile[0]]))
+    face.translate(outward * inner)
+    cutter = face.extrude(outward * (outer - inner))
+    volume_before = tray.Volume
+    result = tray.cut(cutter)
+    if not result.isValid() or len(result.Solids) != 1:
+        raise SystemExit(f"error: cutting the {label} ramp broke the solid")
+    if result.Volume >= volume_before:
+        raise SystemExit(f"error: the {label} ramp removed no material")
+
+    crest = end_on_outline.add(away * NOTCH_RAMP_MM).add(up * depth)
+    crest_edges = []
+    for edge in result.Edges:
+        midpoint = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
+        offset = midpoint.sub(crest)
+        if abs(offset.dot(away)) > 0.4 or abs(offset.dot(up)) > 0.4:
+            continue
+        if not -1.0 < offset.dot(outward) < outer:
+            continue
+        tangent = edge.valueAt(edge.LastParameter).sub(
+            edge.valueAt(edge.FirstParameter)
+        )
+        if tangent.Length < 1e-9:
+            continue
+        tangent.normalize()
+        if abs(tangent.dot(away)) > 0.5 or abs(tangent.dot(up)) > 0.5:
+            continue
+        crest_edges.append(edge)
+    if crest_edges:
+        try:
+            rounded = result.makeFillet(NOTCH_CREST_RADIUS_MM, crest_edges)
+            if rounded.isValid() and len(rounded.Solids) == 1:
+                return rounded, True
+        except Part.OCCError:
+            pass
+    return result, False
 
 
 def build_tray(outline_wire, up, gap, wall, floor, depth, ledge_width, ledge_height):
@@ -708,6 +782,37 @@ def main():
         arguments.depth,
         "usb",
     )
+    ramp_ends = (
+        (
+            switch_notch_center.sub(
+                switch_direction * (POWER_SWITCH_NOTCH_WIDTH_MM / 2.0)
+            ),
+            switch_direction.negative(),
+            POWER_SWITCH_NOTCH_DEPTH_MM,
+            "switch end",
+        ),
+        (
+            usb_notch_center.add(usb_direction * (usb_width / 2.0)),
+            usb_direction,
+            USB_NOTCH_DEPTH_MM,
+            "usb end",
+        ),
+    )
+    crest_results = []
+    for end_on_outline, away, notch_depth, label in ramp_ends:
+        tray, crest_rounded = cut_notch_ramp(
+            tray,
+            resting_face.OuterWire,
+            up,
+            end_on_outline,
+            away,
+            arguments.gap,
+            arguments.wall,
+            arguments.depth,
+            notch_depth,
+            label,
+        )
+        crest_results.append((label, crest_rounded))
     mesh = export_stl(tray, arguments.stl_file)
 
     board_box = board_shape.BoundBox
@@ -738,6 +843,14 @@ def main():
           f"for the USB cable over the whole neighbouring segment near "
           f"({usb_notch_center.x:.2f}, {usb_notch_center.y:.2f}), merged with "
           f"the switch notch")
+    for label, crest_rounded in crest_results:
+        crest_note = (
+            f"crest rounded r{NOTCH_CREST_RADIUS_MM}"
+            if crest_rounded
+            else "crest left sharp (fillet failed)"
+        )
+        print(f"ramp:       {NOTCH_RAMP_MM} mm slope into the notch at the "
+              f"{label}, {crest_note}")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
