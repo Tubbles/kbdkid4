@@ -9,7 +9,8 @@ The kbdkid3 plate does not share the kbdkid4 board's origin. The
 script aligns it by matching the plate's switch cutout centers to the
 board's key switch positions (parsed from the board sources), refusing
 anything but a pure translation, and then trims the plate's outer
-edges so it fits the tray.
+edges so it fits the tray. Below the microcontroller, next to the
+thumb key column, the plate extends sideways to the tray wall.
 
 Plain through holes for the mounting screws are drilled where the
 board has its mounting drills, detected in the kbdkid4 STEP exactly
@@ -68,6 +69,12 @@ ALIGNMENT_RESIDUAL_LIMIT_MM = 0.05
 
 # The reused plate overhangs the tray; trim its outer edges to fit.
 PLATE_EDGE_TRIM_MM = 0.4
+
+# Below the microcontroller the plate extends sideways to the tray
+# wall, next to the thumb key column: a tab on the rightmost silhouette
+# edge that lies below the MCU.
+MCU_NAME = "U1"
+MCU_TAB_EXTENSION_MM = 2.5
 
 # Below this much surrounding plate material a cut is a clearance
 # cutout in mostly open plate area rather than a supported screw hole
@@ -201,9 +208,9 @@ def board_alignment_offset(plate, switches):
     return mean
 
 
-def trim_outer_edges(plate, trim):
-    """Shrink the plate's outer silhouette by `trim` on all outer
-    edges, leaving the cutouts untouched."""
+def plate_silhouette_bottom_face(plate):
+    """The bottom face of the fused plate, whose outer wire is the
+    plate's silhouette."""
     silhouette = plate.Solids[0].multiFuse(plate.Solids[1:]).removeSplitter()
     bottom = silhouette.BoundBox.ZMin
     bottom_faces = [
@@ -217,9 +224,15 @@ def trim_outer_edges(plate, trim):
         raise SystemExit(
             f"error: expected one plate bottom face, found {len(bottom_faces)}"
         )
-    outline = offset_outline(bottom_faces[0].OuterWire, -trim)
+    return bottom_faces[0]
+
+
+def trim_outer_edges(plate, trim):
+    """Shrink the plate's outer silhouette by `trim` on all outer
+    edges, leaving the cutouts untouched."""
+    outline = offset_outline(plate_silhouette_bottom_face(plate).OuterWire, -trim)
     keep_prism = Part.Face(outline).extrude(
-        App.Vector(0, 0, silhouette.BoundBox.ZLength + 2.0)
+        App.Vector(0, 0, plate.BoundBox.ZLength + 2.0)
     )
     keep_prism.translate(App.Vector(0, 0, -1.0))
     trimmed = plate.common(keep_prism)
@@ -235,6 +248,52 @@ def trim_outer_edges(plate, trim):
                 f"to {new_length:.2f} mm, expected minus {2.0 * trim:.2f} mm"
             )
     return trimmed
+
+
+def extend_mcu_tab(plate):
+    """Widen the plate out to the tray wall below the microcontroller,
+    next to the thumb key column.
+
+    The tab sits on the plate silhouette's rightmost vertical edge
+    below the MCU (in this plate, the thumb key cell's outer edge) and
+    extends MCU_TAB_EXTENSION_MM outward, spanning that edge's full
+    length. Returns (plate, tab_edge_x, tab_y_range).
+    """
+    mcu_by_name = component_positions(re.compile(re.escape(MCU_NAME)))
+    if MCU_NAME not in mcu_by_name:
+        raise SystemExit(
+            f"error: microcontroller '{MCU_NAME}' not found in the board sources"
+        )
+    mcu = mcu_by_name[MCU_NAME]
+    box = plate.BoundBox
+    plate_center_x = (box.XMin + box.XMax) / 2.0
+    candidates = []
+    for edge in plate_silhouette_bottom_face(plate).OuterWire.Edges:
+        start = edge.valueAt(edge.FirstParameter)
+        end = edge.valueAt(edge.LastParameter)
+        if abs(start.x - end.x) > 0.01:
+            continue
+        if max(start.y, end.y) > mcu.y:
+            continue
+        if start.x < plate_center_x:
+            continue
+        candidates.append((start.x, min(start.y, end.y), max(start.y, end.y)))
+    if not candidates:
+        raise SystemExit(
+            "error: no vertical silhouette edge below the MCU to extend"
+        )
+    edge_x, y_low, y_high = max(candidates)
+    tab = Part.makeBox(
+        MCU_TAB_EXTENSION_MM,
+        y_high - y_low,
+        box.ZLength,
+        App.Vector(edge_x, y_low, box.ZMin),
+    )
+    return (
+        Part.makeCompound(list(plate.Solids) + [tab]),
+        edge_x,
+        (y_low, y_high),
+    )
 
 
 def drill_holes(plate, hole_centers, hole_diameter):
@@ -292,6 +351,7 @@ def main():
     alignment = board_alignment_offset(plate, switches)
     plate.translate(alignment)
     plate = trim_outer_edges(plate, PLATE_EDGE_TRIM_MM)
+    plate, tab_edge_x, tab_y_range = extend_mcu_tab(plate)
     box = plate.BoundBox
     plate, supports = drill_holes(plate, hole_centers, arguments.hole_diameter)
     mesh = export_stl(plate, arguments.stl_file)
@@ -303,6 +363,9 @@ def main():
     print(f"aligned:    moved ({alignment.x:+.3f}, {alignment.y:+.3f}) mm onto the "
           f"board's switch grid ({len(switches)} switches), outer edges "
           f"trimmed {PLATE_EDGE_TRIM_MM} mm")
+    print(f"tab:        {MCU_TAB_EXTENSION_MM} mm extension below {MCU_NAME} to "
+          f"the tray wall, x {tab_edge_x:.2f} -> {tab_edge_x + MCU_TAB_EXTENSION_MM:.2f}, "
+          f"y {tab_y_range[0]:.2f}..{tab_y_range[1]:.2f}")
     for center, support in zip(hole_centers, supports):
         note = ""
         if support < SUPPORTED_HOLE_THRESHOLD:
