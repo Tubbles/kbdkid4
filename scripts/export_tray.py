@@ -129,9 +129,10 @@ USB_NOTCH_PAST_SHARED_CORNER_MM = 2.5
 USB_NOTCH_PAST_FAR_CORNER_MM = 0.5
 
 # At the merged opening's two outer ends the neighbouring wall slopes
-# down into the notch (45 degrees when the ramp equals the notch
-# depth), and the crest where the full wall meets the slope is rounded.
-NOTCH_RAMP_MM = 3.2
+# down into the notch at this angle from horizontal (the run derives
+# from the notch depth), and the crest where the full wall meets the
+# slope is rounded.
+NOTCH_RAMP_ANGLE_DEGREES = 60.0
 NOTCH_CREST_RADIUS_MM = 1.0
 
 # Implementation tuning, rarely worth touching.
@@ -521,20 +522,21 @@ def cut_notch_ramp(
 ):
     """Slope the wall down into a notch end and round the crest.
 
-    Cuts a wedge so the neighbouring wall descends from full height
-    (NOTCH_RAMP_MM away from the notch end) to the notch floor, then
-    fillets the crest edge where the full-height rim meets the slope
-    with NOTCH_CREST_RADIUS_MM. Returns (tray, crest_rounded).
+    Cuts a wedge so the neighbouring wall descends from full height to
+    the notch floor at NOTCH_RAMP_ANGLE_DEGREES, then fillets the
+    crest edge where the full-height rim meets the slope with
+    NOTCH_CREST_RADIUS_MM. Returns (tray, ramp_run, crest_rounded).
     """
     outward = notch_outward(outline_wire, end_on_outline, away, up)
     inner = -0.5
     outer = gap + wall + 2.0  # wide, the wall may bend within the ramp
     floor_z = depth - notch_depth
+    ramp_run = notch_depth / math.tan(math.radians(NOTCH_RAMP_ANGLE_DEGREES))
     profile = [
         end_on_outline.add(up * floor_z),
         end_on_outline.add(up * (depth + 1.0)),
-        end_on_outline.add(away * NOTCH_RAMP_MM).add(up * (depth + 1.0)),
-        end_on_outline.add(away * NOTCH_RAMP_MM).add(up * depth),
+        end_on_outline.add(away * ramp_run).add(up * (depth + 1.0)),
+        end_on_outline.add(away * ramp_run).add(up * depth),
     ]
     face = Part.Face(Part.makePolygon(profile + [profile[0]]))
     face.translate(outward * inner)
@@ -546,7 +548,7 @@ def cut_notch_ramp(
     if result.Volume >= volume_before:
         raise SystemExit(f"error: the {label} ramp removed no material")
 
-    crest = end_on_outline.add(away * NOTCH_RAMP_MM).add(up * depth)
+    crest = end_on_outline.add(away * ramp_run).add(up * depth)
     crest_edges = []
     for edge in result.Edges:
         midpoint = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
@@ -568,10 +570,10 @@ def cut_notch_ramp(
         try:
             rounded = result.makeFillet(NOTCH_CREST_RADIUS_MM, crest_edges)
             if rounded.isValid() and len(rounded.Solids) == 1:
-                return rounded, True
+                return rounded, ramp_run, True
         except Part.OCCError:
             pass
-    return result, False
+    return result, ramp_run, False
 
 
 def build_tray(outline_wire, up, gap, wall, floor, depth, ledge_width, ledge_height):
@@ -800,7 +802,7 @@ def main():
     )
     crest_results = []
     for end_on_outline, away, notch_depth, label in ramp_ends:
-        tray, crest_rounded = cut_notch_ramp(
+        tray, ramp_run, crest_rounded = cut_notch_ramp(
             tray,
             resting_face.OuterWire,
             up,
@@ -812,7 +814,7 @@ def main():
             notch_depth,
             label,
         )
-        crest_results.append((label, crest_rounded))
+        crest_results.append((label, ramp_run, crest_rounded))
     mesh = export_stl(tray, arguments.stl_file)
 
     board_box = board_shape.BoundBox
@@ -843,14 +845,15 @@ def main():
           f"for the USB cable over the whole neighbouring segment near "
           f"({usb_notch_center.x:.2f}, {usb_notch_center.y:.2f}), merged with "
           f"the switch notch")
-    for label, crest_rounded in crest_results:
+    for label, ramp_run, crest_rounded in crest_results:
         crest_note = (
             f"crest rounded r{NOTCH_CREST_RADIUS_MM}"
             if crest_rounded
             else "crest left sharp (fillet failed)"
         )
-        print(f"ramp:       {NOTCH_RAMP_MM} mm slope into the notch at the "
-              f"{label}, {crest_note}")
+        print(f"ramp:       {NOTCH_RAMP_ANGLE_DEGREES:.0f} degree slope "
+              f"({ramp_run:.2f} mm run) into the notch at the {label}, "
+              f"{crest_note}")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
