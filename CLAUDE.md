@@ -24,6 +24,8 @@ The workflow, on a clean git tree:
 
 Changes that span several files (adding or removing a component instance, placing it on the board, creating or deleting a net) go through `tools/lpedit.py` in that skill, which does the whole operation and writes nothing if any part of it fails. `tools/lpsch.py` draws schematic wires and `tools/lpbrd.py` routes copper, both addressing terminals by name (`D110.A`, `JP12.2`). `lpedit.py check` verifies that every cross-file UUID reference still resolves, which is the layer below ERC and the thing a half-finished hand edit breaks.
 
+`tools/lplib.py` authors library elements (symbols, packages, components, devices) in `library/`, including the pin and pad to signal maps, which it can fill in by matching names.
+
 Those tools are exact about connectivity and geometry but know nothing about where copper should go: no autorouting, no collision avoidance. Plan the path, then let DRC judge it.
 
 For layout decisions themselves (stackup, placement, trace widths, impedance, EMC), the `pcb-design` skill has the engineering reference and a calculator.
