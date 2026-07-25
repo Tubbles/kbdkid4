@@ -90,12 +90,12 @@
     },
     {
       "path": "kbdkid4_v1_Schematic.pdf",
-      "size": 128289,
+      "size": 128475,
       "category": "pdf"
     },
     {
       "path": "kbdkid4_v1.lppz",
-      "size": 4854180,
+      "size": 4855286,
       "category": "archive"
     },
     {
@@ -105,10 +105,10 @@
     },
     {
       "path": "kbdkid4_v1.zip",
-      "size": 190728,
+      "size": 190723,
       "category": "archive"
     }
   ],
   "zip": "kbdkid4.zip",
-  "generatedAt": "2026-07-24T15:01:28.117Z"
+  "generatedAt": "2026-07-25T15:49:04.328Z"
 }
