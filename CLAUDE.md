@@ -4,9 +4,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-LibrePCB project for kbdkid4, a split wireless keyboard. The `.lp` S-expression files (`circuit/`, `schematics/`, `boards/`, `library/`, `project/`) are written by the LibrePCB application; design changes happen through the LibrePCB GUI, not by hand-editing those files. The only hand-written code lives in `scripts/`.
+LibrePCB project for kbdkid4, a split wireless keyboard. The `.lp` S-expression files (`circuit/`, `schematics/`, `boards/`, `library/`, `project/`) are written by the LibrePCB application. The GUI is still the natural way to do interactive design work, but these files can also be edited directly (see below). The only hand-written code lives in `scripts/`.
 
 `output/v1/` contains committed generated outputs (gerbers, BOM, PDFs, STEP model of the assembled board). They are produced by the output jobs defined in `project/jobs.lp`, run from the LibrePCB GUI or by librepcb-cli.
+
+## Editing the `.lp` files directly
+
+The `librepcb` skill (`~/.claude/skills/librepcb/`) carries the file format reference and a toolkit whose serializer is a port of LibrePCB's own, verified byte-exact against LibrePCB's test data. Use it rather than editing `.lp` files with a text editor or a generic S-expression library: line breaks are nodes in the tree, indentation is significant, and project-level collections are written sorted by UUID, so a naive edit reflows the file or lands a node in the wrong place.
+
+The workflow, on a clean git tree:
+
+    LP=~/.claude/skills/librepcb/tools/lp.py
+    python3 $LP get boards/default/board.lp 'device[@0=<uuid>]/position'
+    python3 $LP set boards/default/board.lp 'device[@0=<uuid>]/position/@1' 41.0
+    podman run --rm -v "$PWD":/work -w /work docker.io/librepcb/librepcb-cli:2.1.1 \
+        open-project --strict --erc --drc kbdkid4.lpp
+
+`--strict` fails unless the files are exactly what LibrePCB itself would write, so it is the authority on whether an edit is correct. Treat a failure as a wrong edit, not a LibrePCB quirk. `lp.py diff` gives a structural diff keyed by UUID, which is far more readable than `git diff` on `board.lp`.
+
+Changes that span several files (adding or removing a component instance, placing it on the board, creating or deleting a net) go through `tools/lpedit.py` in that skill, which does the whole operation and writes nothing if any part of it fails. `lpedit.py check` verifies that every cross-file UUID reference still resolves, which is the layer below ERC and the thing a half-finished hand edit breaks.
+
+For layout decisions themselves (stackup, placement, trace widths, impedance, EMC), the `pcb-design` skill has the engineering reference and a calculator.
 
 ## Tray export
 
