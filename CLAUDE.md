@@ -26,7 +26,7 @@ Changes that span several files (adding or removing a component instance, placin
 
 `tools/lplib.py` authors library elements (symbols, packages, components, devices) in `library/`, including the pin and pad to signal maps, which it can fill in by matching names.
 
-Those tools are exact about connectivity and geometry but know nothing about where copper should go: no autorouting, no collision avoidance. Plan the path, then let DRC judge it.
+Those tools are exact about connectivity and geometry but know nothing about where copper should go: no autorouting, no collision avoidance. Plan the path, then let DRC judge it. When DRC does complain, `lpbrd.py clearance --net <name>` measures the geometry and gives coordinates, which the DRC output itself does not.
 
 For layout decisions themselves (stackup, placement, trace widths, impedance, EMC), the `pcb-design` skill has the engineering reference and a calculator.
 
