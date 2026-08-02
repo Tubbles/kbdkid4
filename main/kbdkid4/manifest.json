@@ -10,92 +10,92 @@
     },
     {
       "path": "assembly/kbdkid4_v1_PnP_Std_BOT.csv",
-      "size": 7287,
+      "size": 7289,
       "category": "pnp"
     },
     {
       "path": "assembly/kbdkid4_v1_PnP_Std_TOP.csv",
-      "size": 7053,
+      "size": 7055,
       "category": "pnp"
     },
     {
       "path": "gerber/kbdkid4_v1_COPPER-BOTTOM.gbr",
-      "size": 43199,
+      "size": 43211,
       "category": "gerber"
     },
     {
       "path": "gerber/kbdkid4_v1_COPPER-IN1.gbr",
-      "size": 13637,
+      "size": 13649,
       "category": "gerber"
     },
     {
       "path": "gerber/kbdkid4_v1_COPPER-IN2.gbr",
-      "size": 608593,
+      "size": 608605,
       "category": "gerber"
     },
     {
       "path": "gerber/kbdkid4_v1_COPPER-TOP.gbr",
-      "size": 44689,
+      "size": 44701,
       "category": "gerber"
     },
     {
       "path": "gerber/kbdkid4_v1_DRILLS-NPTH.drl",
-      "size": 5125,
+      "size": 5137,
       "category": "drill"
     },
     {
       "path": "gerber/kbdkid4_v1_DRILLS-PTH.drl",
-      "size": 3743,
+      "size": 3755,
       "category": "drill"
     },
     {
       "path": "gerber/kbdkid4_v1_OUTLINES.gbr",
-      "size": 2216,
+      "size": 2228,
       "category": "gerber"
     },
     {
       "path": "gerber/kbdkid4_v1_SILKSCREEN-BOTTOM.gbr",
-      "size": 42506,
+      "size": 42518,
       "category": "gerber"
     },
     {
       "path": "gerber/kbdkid4_v1_SILKSCREEN-TOP.gbr",
-      "size": 42353,
+      "size": 42365,
       "category": "gerber"
     },
     {
       "path": "gerber/kbdkid4_v1_SOLDERMASK-BOTTOM.gbr",
-      "size": 21872,
+      "size": 21884,
       "category": "gerber"
     },
     {
       "path": "gerber/kbdkid4_v1_SOLDERMASK-TOP.gbr",
-      "size": 21728,
+      "size": 21740,
       "category": "gerber"
     },
     {
       "path": "gerber/kbdkid4_v1_SOLDERPASTE-BOTTOM.gbr",
-      "size": 4429,
+      "size": 4441,
       "category": "gerber"
     },
     {
       "path": "gerber/kbdkid4_v1_SOLDERPASTE-TOP.gbr",
-      "size": 4448,
+      "size": 4460,
       "category": "gerber"
     },
     {
       "path": "kbdkid4_v1_Assembly.pdf",
-      "size": 2090667,
+      "size": 2090620,
       "category": "pdf"
     },
     {
       "path": "kbdkid4_v1_Schematic.pdf",
-      "size": 128398,
+      "size": 128503,
       "category": "pdf"
     },
     {
       "path": "kbdkid4_v1.lppz",
-      "size": 4855089,
+      "size": 4911902,
       "category": "archive"
     },
     {
@@ -105,10 +105,10 @@
     },
     {
       "path": "kbdkid4_v1.zip",
-      "size": 190728,
+      "size": 190906,
       "category": "archive"
     }
   ],
   "zip": "kbdkid4.zip",
-  "generatedAt": "2026-07-25T17:18:43.057Z"
+  "generatedAt": "2026-08-02T11:04:42.560Z"
 }
