@@ -1,5 +1,5 @@
 (librepcb_board 82b26ad5-ee44-4a8a-8f43-cf6dd6902403
- (name "default")
+ (name "Board 1.0")
  (default_font "newstroke.bene")
  (grid (interval 0.225) (unit millimeters))
  (layers (inner 2))
