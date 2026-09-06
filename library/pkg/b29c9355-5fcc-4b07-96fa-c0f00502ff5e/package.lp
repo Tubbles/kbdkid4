@@ -18,10 +18,12 @@
  (pad 5843cb9f-b009-41f4-8418-b1afcce3a2cf (name "CASE_2"))
  (pad 558b1e25-421d-4115-8441-6202bebc36cd (name "CASE_3"))
  (pad e849efd4-fba7-4f50-a536-885c3a0f52e0 (name "CASE_4"))
+ (3d_model 18fd4011-246c-4051-b43f-7a5e6b01a4c7 (name "SSSS811101"))
  (footprint b094b6b2-ad8b-4086-b637-d95a47dae3da
   (name "default")
   (description "")
-  (3d_position 0.0 0.0 0.0) (3d_rotation 0.0 0.0 0.0)
+  (3d_position 0.0 0.0 0.0) (3d_rotation 90.0 0.0 0.0)
+  (3d_model 18fd4011-246c-4051-b43f-7a5e6b01a4c7)
   (pad 5843cb9f-b009-41f4-8418-b1afcce3a2cf (side top) (shape roundrect)
    (position -3.65 -1.1) (rotation 0.0) (size 1.0 0.8) (radius 0.0)
    (stop_mask auto) (solder_paste auto) (clearance 0.0) (function unspecified)

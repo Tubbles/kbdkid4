@@ -35,10 +35,12 @@
  (pad 99dd9fa5-d5a3-4602-b291-59bad7d8e51c (name "GND_3"))
  (pad 7ccce8f3-5e06-4190-bb6d-cc88718a723f (name "008"))
  (pad 7abd9b16-86ba-4c8b-9732-b24c0357adad (name "006"))
+ (3d_model e05d4c45-1d70-49b4-a961-7aef28823272 (name "nice!nano v2"))
  (footprint ea2cfaa5-2c77-414d-8af6-fd30e310e774
   (name "default")
   (description "")
-  (3d_position 0.0 0.0 0.0) (3d_rotation 0.0 0.0 0.0)
+  (3d_position 0.0 1.15 4.15) (3d_rotation 180.0 0.0 -90.0)
+  (3d_model e05d4c45-1d70-49b4-a961-7aef28823272)
   (pad 69e4cd58-21eb-46ef-ad8d-20c63c0e5373 (side top) (shape roundrect)
    (position -7.62 13.97) (rotation 0.0) (size 2.19 1.587) (radius 1.0)
    (stop_mask auto) (solder_paste off) (clearance 0.0) (function unspecified)
