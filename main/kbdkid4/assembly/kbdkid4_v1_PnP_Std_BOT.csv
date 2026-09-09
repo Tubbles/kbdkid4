@@ -2,9 +2,9 @@
 #
 # Project Name:        kbdkid4
 # Project Version:     v1
-# Board Name:          Board 1.0
+# Board Name:          Board 1.1
 # Generation Software: LibrePCB 2.1.1
-# Generation Date:     2026-08-02T11:04:40
+# Generation Date:     2026-09-09T15:29:56
 # Unit:                mm
 # Rotation:            Degrees CCW
 # Board Side:          Bottom
@@ -36,36 +36,36 @@ D260,Diode SOD123,Diode SOD123,SOD3717X135,9.049,70.637,180.0,Bottom,SMT
 D261,Diode SOD123,Diode SOD123,SOD3717X135,9.049,51.587,180.0,Bottom,SMT
 D262,Diode SOD123,Diode SOD123,SOD3717X135,9.049,32.537,180.0,Bottom,SMT
 D263,Diode SOD123,Diode SOD123,SOD3717X135,9.049,13.487,180.0,Bottom,SMT
-DS2,nice!view,nice!view,NICE_NICEVIEW,124.849,22.543,90.0,Bottom,THT
-J2,,JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal,JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal,118.824,66.437,180.0,Bottom,THT
-JP24,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,32.703,0.0,Bottom,Other
-JP25,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,30.163,180.0,Bottom,Other
-JP26,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,45.403,0.0,Bottom,Other
-JP27,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.9287,25.0825,90.0,Bottom,Other
-JP28,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,127.3887,25.0825,90.0,Bottom,Other
-JP29,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,40.323,0.0,Bottom,Other
-JP30,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,55.563,180.0,Bottom,Other
-JP31,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,27.623,180.0,Bottom,Other
-JP32,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,37.783,0.0,Bottom,Other
-JP33,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,30.163,0.0,Bottom,Other
-JP34,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,42.863,0.0,Bottom,Other
-JP35,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,124.8487,25.0825,90.0,Bottom,Other
-JP36,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,42.863,180.0,Bottom,Other
-JP37,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,27.623,0.0,Bottom,Other
-JP38,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,47.943,180.0,Bottom,Other
-JP39,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,32.703,180.0,Bottom,Other
-JP40,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,50.483,0.0,Bottom,Other
-JP41,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.7687,25.0825,90.0,Bottom,Other
-JP42,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,47.943,0.0,Bottom,Other
-JP43,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,35.243,0.0,Bottom,Other
-JP44,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,55.563,0.0,Bottom,Other
-JP45,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,122.3087,25.0825,90.0,Bottom,Other
-JP46,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,45.403,180.0,Bottom,Other
-JP49,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,117.554,61.357,270.0,Bottom,Other
-JP50,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,120.094,61.357,270.0,Bottom,Other
-JP53,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,53.023,0.0,Bottom,Other
-JP54,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,50.483,180.0,Bottom,Other
-S2,SSSS811101,SSSS811101,ALPSALPINE_SSSS811101,128.826,67.151,251.0,Bottom,SMT
+DS2,nice!view,nice!view,NICE_NICEVIEW,124.849,40.725,90.0,Bottom,THT
+J1,,JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal,JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal,121.284,23.19,120.0,Bottom,THT
+JP1,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,73.457,180.0,Bottom,Other
+JP10,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,48.057,0.0,Bottom,Other
+JP11,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,55.677,0.0,Bottom,Other
+JP12,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,58.217,0.0,Bottom,Other
+JP13,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,60.757,0.0,Bottom,Other
+JP14,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,63.297,0.0,Bottom,Other
+JP15,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,73.457,0.0,Bottom,Other
+JP16,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,70.917,0.0,Bottom,Other
+JP17,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,68.377,0.0,Bottom,Other
+JP18,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,65.837,0.0,Bottom,Other
+JP19,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,124.849,37.76,270.0,Bottom,Other
+JP2,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,63.297,180.0,Bottom,Other
+JP20,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,127.389,37.76,270.0,Bottom,Other
+JP21,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,37.76,270.0,Bottom,Other
+JP22,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,122.309,37.76,270.0,Bottom,Other
+JP23,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,37.76,270.0,Bottom,Other
+JP3,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,60.757,180.0,Bottom,Other
+JP4,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,50.597,180.0,Bottom,Other
+JP47,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,128.0,20.0,180.0,Bottom,Other
+JP48,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,128.0,22.0,180.0,Bottom,Other
+JP5,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,48.057,180.0,Bottom,Other
+JP51,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,68.377,180.0,Bottom,Other
+JP52,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,65.837,180.0,Bottom,Other
+JP6,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,119.769,45.517,180.0,Bottom,Other
+JP7,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,45.517,0.0,Bottom,Other
+JP8,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,50.597,0.0,Bottom,Other
+JP9,Solder Jumper 2P,Solder Jumper 2P,SOLDER_JUMPER_2P,129.929,53.137,0.0,Bottom,Other
+S1,SSSS811101,SSSS811101,ALPSALPINE_SSSS811101,104.299,76.378,180.0,Bottom,SMT
 S203,PG1350 Kailh Choc V1,PG1350 Kailh Choc V1,KHA-PG1350,123.349,9.207,90.0,Bottom,SMT
 S210,PG1350 Kailh Choc V1,PG1350 Kailh Choc V1,KHA-PG1350,104.299,68.739,90.0,Bottom,SMT
 S211,PG1350 Kailh Choc V1,PG1350 Kailh Choc V1,KHA-PG1350,104.299,49.689,90.0,Bottom,SMT
@@ -91,5 +91,5 @@ S260,PG1350 Kailh Choc V1,PG1350 Kailh Choc V1,KHA-PG1350,9.049,66.357,90.0,Bott
 S261,PG1350 Kailh Choc V1,PG1350 Kailh Choc V1,KHA-PG1350,9.049,47.307,90.0,Bottom,SMT
 S262,PG1350 Kailh Choc V1,PG1350 Kailh Choc V1,KHA-PG1350,9.049,28.257,90.0,Bottom,SMT
 S263,PG1350 Kailh Choc V1,PG1350 Kailh Choc V1,KHA-PG1350,9.049,9.207,90.0,Bottom,SMT
-S4,B3U-1000P(M),B3U-1000P(M),OMRON_B3U-1000P(M),124.222,62.309,270.0,Bottom,SMT
-U2,nice!nano v2.0,nice!nano v2.0,NICE_NICENANO,124.849,41.593,0.0,Bottom,THT
+S4,Pushbutton Momentary NO (ESWITCH_TL3315NF100Q),Pushbutton Momentary NO (ESWITCH_TL3315NF100Q),ESWITCH_TL3315NF100Q,125.0,30.0,0.0,Bottom,SMT
+U1,nice!nano v2.0,nice!nano v2.0,NICE_NICENANO,124.849,59.487,0.0,Bottom,THT
