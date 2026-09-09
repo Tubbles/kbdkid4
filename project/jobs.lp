@@ -97,7 +97,7 @@
    (suffix_buried "_DRILLS-PLATED-{{START_LAYER}}-{{END_LAYER}}.drl")
    (g85_slots false)
   )
-  (board default)
+  (board 063e517a-3ded-4943-b2aa-4f8854622f53)
   (output "gerber/{{PROJECT}}_{{VERSION}}")
  )
  (job 3ed91409-fa60-4440-94be-9d57ce6e016d (name "Pick&Place CSV")
