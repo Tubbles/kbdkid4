@@ -1,6 +1,6 @@
 G04 --- HEADER BEGIN --- *
-G04 #@! TF.GenerationSoftware,LibrePCB,LibrePCB,2.1.1*
-G04 #@! TF.CreationDate,2026-09-06T22:58:03*
+G04 #@! TF.GenerationSoftware,LibrePCB,LibrePCB,2.1.2-unstable*
+G04 #@! TF.CreationDate,2026-09-09T17:25:34*
 G04 #@! TF.ProjectId,kbdkid4,063e517a-3ded-4943-b2aa-4f8854622f53,v1*
 G04 #@! TF.Part,Single*
 G04 #@! TF.SameCoordinates*
@@ -1209,5 +1209,5 @@ X18574000Y56832000D03*
 X94774000Y60404000D03*
 X114141000Y19765000D03*
 G04 --- BOARD END --- *
-G04 #@! TF.MD5,4153596aeed6045abe276cbd17a6a1f5*
+G04 #@! TF.MD5,50e8129d00330e7a934ab2f3b1952711*
 M02*
