@@ -42,13 +42,15 @@ Parameters and their defaults live in the constants block at the top of the scri
 
 `scripts/export_plate.py` exports the switch plate the same way: the kbdkid3 plate model (`resources/kbdkid3-plate-left.FCStd`, a parametric switch cell replicated by a point array, with a mirrored right plate that is not exported) drilled with through holes at the board's mounting drills. The kbdkid3 plate does not share the kbdkid4 board's origin; the script aligns it by matching the plate's cutout centers against the switch positions parsed from `board.lp` and `circuit.lp`, accepting only a pure translation.
 
+`scripts/export_pcb.py` exports a printable replica of the bare board for test-fitting before the fabricated boards arrive: the board's outline face from the STEP, outline moved inward and every drill hole moved outward by `pull_in` (default 0.2 mm, the expected print swelling per side), extruded to the board thickness. FreeCAD's `makeOffset2D` on the whole face would shrink the holes along with the outline, which is why the script offsets the outer wire and each hole wire separately.
+
 Shared machinery lives in `scripts/board_step.py`: locating the board without hardcoded face indices (by the `PCB` assembly label, a constant in LibrePCB's `stepexport.cpp`, validated geometrically, with a geometry-only fallback), mounting drill detection, and the freecadcmd scaffolding. Its module docstring documents the freecadcmd quirks (exit codes swallowed, `__name__` set to the file stem, scripts run twice, dash-arguments intercepted even after `--pass`, hence the `key=value` argument style and `os._exit`). Read that docstring before writing any new FreeCAD script here.
 
 The STL's Z orientation is not critical: the tray is mirrored in the slicer anyway, since the split keyboard needs both mirrored halves.
 
 ## CI
 
-`.github/workflows/ci.yml` has two jobs: `outputs` runs the `Tubbles/librepcb-ci@v1` action (regenerates all output jobs with librepcb-cli, uploads them as the `librepcb-ci-outputs` artifact, publishes browsable outputs to GitHub Pages; ERC/DRC checks are non-fatal), and `tray` downloads that artifact, builds the FreeCAD image, runs the tray and plate exports on every generated `.step`, and uploads the results as the `tray-stl` and `plate-stl` artifacts.
+`.github/workflows/ci.yml` has two jobs: `outputs` runs the `Tubbles/librepcb-ci@v1` action (regenerates all output jobs with librepcb-cli, uploads them as the `librepcb-ci-outputs` artifact, publishes browsable outputs to GitHub Pages; ERC/DRC checks are non-fatal), and `tray` downloads that artifact, builds the FreeCAD image, runs the tray, plate and PCB replica exports on every generated `.step`, and uploads the results as the `tray-stl`, `plate-stl` and `pcb-stl` artifacts.
 
 ## Conventions
 
