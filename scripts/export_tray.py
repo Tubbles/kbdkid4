@@ -26,9 +26,10 @@ indices, in two stages:
    this check is rejected loudly rather than guessed at.
 
 The tray's cavity opens toward the side of the board where components
-protrude the furthest, so the bare(r) side rests on the tray floor.
-Pass the word "flip" to override. The tray is positioned in board
-coordinates: the cavity floor touches the board's resting face.
+protrude the furthest, so the bare(r) side rests on the tray floor; a
+bare-board STEP (no component bodies) opens toward the board's top
+side. Pass the word "flip" to override. The tray is positioned in
+board coordinates: the cavity floor touches the board's resting face.
 
 Every corner, convex or concave, bends with the same pair of
 concentric radii: the corner radius on the outside of the bend and
@@ -56,15 +57,14 @@ under the board, and the board rests on ledge and standoffs together.
 The well inside the ledge continues the concentric corner treatment
 inward. Set ledge_width to 0 to build without a ledge.
 
-The battery switch (POWER_SWITCH_NAME, located via the board sources
-since it has no 3D model in the STEP) protrudes past the board
-outline, so the wall gets a notch cut down from the rim over the
-outline segment nearest the switch. The neighbouring segment on the
-north side gets the same treatment over its whole length, letting the
-USB cable come in from the top down to the microcontroller. At the
-merged opening's two outer ends the neighbouring wall slopes down
-into the notch and the crest where the full wall meets the slope is
-rounded.
+The battery switch (POWER_SWITCH_NAME) protrudes past the board
+outline and the microcontroller's USB connector (MCU_NAME) sits on
+it, so the wall gets a notch cut down from the rim over the outline
+segment nearest each of them: one sized for the switch body, one for
+the USB plug. Both are located via the board sources, since the STEP
+carries no component bodies. At every notch end the neighbouring wall
+slopes down into the notch and the crest where the full wall meets
+the slope is rounded.
 
 The design values live in the constants right below this docstring;
 everything else derives from them.
@@ -83,6 +83,7 @@ import re
 
 from board_step import (
     MOUNTING_HOLE_DIAMETER_MM,
+    component_placements,
     component_positions,
     deduplicate_shapes,
     export_stl,
@@ -109,29 +110,28 @@ DEFAULT_LEDGE_WIDTH_MM = 1.0  # PCB support ledge from the cavity wall (0 disabl
 
 # The battery switch protrudes past the board outline, so the wall gets
 # a notch cut down from the rim over the outline segment nearest the
-# switch. The switch position comes from the board sources (it has no
-# 3D model in the STEP).
+# switch. The switch position comes from the board sources (the STEP
+# carries no component bodies).
 POWER_SWITCH_NAME = "S1"
 POWER_SWITCH_NOTCH_DEPTH_MM = 3.2  # cut down from the rim
-POWER_SWITCH_NOTCH_WIDTH_MM = 9.3  # along the wall, the whole segment
+POWER_SWITCH_NOTCH_WIDTH_MM = 9.3  # along the wall, clears the switch body
 
-# The USB cable comes in over the outline segment north of the switch
-# segment, down to the nice!nano below it, so that rim gets the same
-# treatment over the whole neighbouring segment. The width derives from
-# the segment; the notch reaches past the corner shared with the switch
-# notch so the two openings merge instead of leaving a sliver: the two
-# rectangular cutters' end faces meet at an angle, so the reach must
-# cover the outer corner wedge between them, which extends about
-# 1.3 mm past the corner. It also reaches just past the far corner
-# round's sharpened end.
+# The nice!nano's USB-C connector sits on the board outline, so the
+# wall gets a second notch over the outline segment nearest the
+# connector, wide enough for a USB-C plug overmold (12.35 mm at most
+# per the USB Type-C specification). The connector end is the far end
+# of the nice!nano package along the footprint's +Y axis, measured on
+# the package's 3D model: 18.7 mm from the center of the pin rows,
+# which is the footprint origin.
+MCU_NAME = "U1"
+MCU_USB_END_OFFSET_MM = 18.7
 USB_NOTCH_DEPTH_MM = 3.2
-USB_NOTCH_PAST_SHARED_CORNER_MM = 2.5
-USB_NOTCH_PAST_FAR_CORNER_MM = 0.5
+USB_NOTCH_WIDTH_MM = 14.0
 
-# At the merged opening's two outer ends the neighbouring wall slopes
-# down into the notch at this angle from horizontal (the run derives
-# from the notch depth), and the crest where the full wall meets the
-# slope is rounded.
+# At every notch end the neighbouring wall slopes down into the notch
+# at this angle from horizontal (the run derives from the notch
+# depth), and the crest where the full wall meets the slope is
+# rounded.
 NOTCH_RAMP_ANGLE_DEGREES = 60.0
 NOTCH_CREST_RADIUS_MM = 1.0
 
@@ -723,7 +723,7 @@ def main():
             "board sources"
         )
     segments = outline_straight_segments(resting_face.OuterWire)
-    switch_index, switch_notch_center, switch_direction = nearest_outline_segment(
+    _switch_index, switch_notch_center, switch_direction = nearest_outline_segment(
         segments, switch_by_name[POWER_SWITCH_NAME]
     )
     tray = cut_rim_notch(
@@ -740,36 +740,16 @@ def main():
         "switch",
     )
 
-    def segment_midpoint(segment):
-        start, vector = segment
-        return start.add(vector * 0.5)
-
-    neighbours = [
-        segments[(switch_index - 1) % len(segments)],
-        segments[(switch_index + 1) % len(segments)],
-    ]
-    usb_segment = max(neighbours, key=lambda segment: segment_midpoint(segment).y)
-    usb_start, usb_vector = usb_segment
-    usb_direction = App.Vector(usb_vector).normalize()
-    usb_end = usb_start.add(usb_vector)
-    if switch_notch_center.sub(usb_end).Length < switch_notch_center.sub(usb_start).Length:
-        usb_start = usb_end
-        usb_direction = usb_direction.negative()
-    usb_width = (
-        usb_vector.Length
-        + USB_NOTCH_PAST_SHARED_CORNER_MM
-        + USB_NOTCH_PAST_FAR_CORNER_MM
-    )
-    usb_notch_center = usb_start.add(
-        usb_direction
-        * (
-            (
-                usb_vector.Length
-                + USB_NOTCH_PAST_FAR_CORNER_MM
-                - USB_NOTCH_PAST_SHARED_CORNER_MM
-            )
-            / 2.0
+    mcu_by_name = component_placements(re.compile(re.escape(MCU_NAME)))
+    if MCU_NAME not in mcu_by_name:
+        raise SystemExit(
+            f"error: microcontroller '{MCU_NAME}' not found in the board sources"
         )
+    usb_end = mcu_by_name[MCU_NAME].map_point(
+        App.Vector(0.0, MCU_USB_END_OFFSET_MM, 0.0)
+    )
+    _usb_index, usb_notch_center, usb_direction = nearest_outline_segment(
+        segments, usb_end
     )
     tray = cut_rim_notch(
         tray,
@@ -777,29 +757,32 @@ def main():
         up,
         usb_notch_center,
         usb_direction,
-        usb_width,
+        USB_NOTCH_WIDTH_MM,
         USB_NOTCH_DEPTH_MM,
         arguments.gap,
         arguments.wall,
         arguments.depth,
         "usb",
     )
-    ramp_ends = (
+    ramp_ends = []
+    for center, direction, width, notch_depth, label in (
         (
-            switch_notch_center.sub(
-                switch_direction * (POWER_SWITCH_NOTCH_WIDTH_MM / 2.0)
-            ),
-            switch_direction.negative(),
+            switch_notch_center,
+            switch_direction,
+            POWER_SWITCH_NOTCH_WIDTH_MM,
             POWER_SWITCH_NOTCH_DEPTH_MM,
-            "switch end",
+            "switch",
         ),
-        (
-            usb_notch_center.add(usb_direction * (usb_width / 2.0)),
-            usb_direction,
-            USB_NOTCH_DEPTH_MM,
-            "usb end",
-        ),
-    )
+        (usb_notch_center, usb_direction, USB_NOTCH_WIDTH_MM, USB_NOTCH_DEPTH_MM, "usb"),
+    ):
+        for sign in (-1.0, 1.0):
+            away = direction * sign
+            ramp_ends.append((
+                center.add(direction * (sign * width / 2.0)),
+                away,
+                notch_depth,
+                f"{label} notch's {compass_name(away)} end",
+            ))
     crest_results = []
     for end_on_outline, away, notch_depth, label in ramp_ends:
         tray, ramp_run, crest_rounded = cut_notch_ramp(
@@ -841,10 +824,10 @@ def main():
           f"{POWER_SWITCH_NOTCH_DEPTH_MM} mm rim cut for {POWER_SWITCH_NAME} "
           f"at the wall segment near ({switch_notch_center.x:.2f}, "
           f"{switch_notch_center.y:.2f})")
-    print(f"notch:      {usb_width:.1f} x {USB_NOTCH_DEPTH_MM} mm rim cut "
-          f"for the USB cable over the whole neighbouring segment near "
-          f"({usb_notch_center.x:.2f}, {usb_notch_center.y:.2f}), merged with "
-          f"the switch notch")
+    print(f"notch:      {USB_NOTCH_WIDTH_MM} x {USB_NOTCH_DEPTH_MM} mm rim cut "
+          f"for the USB plug at the wall segment nearest {MCU_NAME}'s connector "
+          f"end ({usb_end.x:.2f}, {usb_end.y:.2f}), centered near "
+          f"({usb_notch_center.x:.2f}, {usb_notch_center.y:.2f})")
     for label, ramp_run, crest_rounded in crest_results:
         crest_note = (
             f"crest rounded r{NOTCH_CREST_RADIUS_MM}"
@@ -855,6 +838,14 @@ def main():
               f"({ramp_run:.2f} mm run) into the notch at the {label}, "
               f"{crest_note}")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
+
+
+def compass_name(direction):
+    """north/south/east/west for a horizontal direction, by its
+    dominant axis; only used to label the printout."""
+    if abs(direction.x) >= abs(direction.y):
+        return "east" if direction.x > 0 else "west"
+    return "north" if direction.y > 0 else "south"
 
 
 def axis_name(axis):
