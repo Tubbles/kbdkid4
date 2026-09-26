@@ -20,12 +20,12 @@
     },
     {
       "path": "gerber/kbdkid4_v1_COPPER-BOTTOM.gbr",
-      "size": 46839,
+      "size": 46834,
       "category": "gerber"
     },
     {
       "path": "gerber/kbdkid4_v1_COPPER-IN1.gbr",
-      "size": 16183,
+      "size": 16135,
       "category": "gerber"
     },
     {
@@ -35,7 +35,7 @@
     },
     {
       "path": "gerber/kbdkid4_v1_COPPER-TOP.gbr",
-      "size": 44432,
+      "size": 44427,
       "category": "gerber"
     },
     {
@@ -85,17 +85,17 @@
     },
     {
       "path": "kbdkid4_v1_Assembly.pdf",
-      "size": 2105767,
+      "size": 2105675,
       "category": "pdf"
     },
     {
       "path": "kbdkid4_v1_Schematic.pdf",
-      "size": 128802,
+      "size": 128774,
       "category": "pdf"
     },
     {
       "path": "kbdkid4_v1.lppz",
-      "size": 4134562,
+      "size": 4134481,
       "category": "archive"
     },
     {
@@ -105,10 +105,10 @@
     },
     {
       "path": "kbdkid4_v1.zip",
-      "size": 191106,
+      "size": 191104,
       "category": "archive"
     }
   ],
   "zip": "kbdkid4.zip",
-  "generatedAt": "2026-09-09T15:29:57.569Z"
+  "generatedAt": "2026-09-26T15:44:16.532Z"
 }
