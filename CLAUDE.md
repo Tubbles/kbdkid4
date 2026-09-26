@@ -15,8 +15,8 @@ The `librepcb` skill (`~/.claude/skills/librepcb/`) carries the file format refe
 The workflow, on a clean git tree:
 
     LP=~/.claude/skills/librepcb/tools/lp.py
-    python3 $LP get boards/default/board.lp 'device[@0=<uuid>]/position'
-    python3 $LP set boards/default/board.lp 'device[@0=<uuid>]/position/@1' 41.0
+    python3 $LP get boards/board_1.1/board.lp 'device[@0=<uuid>]/position'
+    python3 $LP set boards/board_1.1/board.lp 'device[@0=<uuid>]/position/@1' 41.0
     podman run --rm -v "$PWD":/work -w /work docker.io/librepcb/librepcb-cli:2.1.1 \
         open-project --strict --erc --drc kbdkid4.lpp
 
@@ -55,5 +55,5 @@ The STL's Z orientation is not critical: the tray is mirrored in the slicer anyw
 - Commit and push completed changes without asking. Keep commits small and focused.
 - `tmp/` is untracked scratch space; `work/` holds design notes and is not committed.
 - Test any change to the export scripts by running them in the container against `output/v1/kbdkid4_v1.step` and checking the exit code; freecadcmd hides Python failures unless the script exits via `os._exit`.
-- `boards/default/board.lp` is the design ground truth (outline polygon vertices, board-level mounting drills). Cross-check what the script detects from the STEP against it rather than trusting either alone.
+- The default board file (the first entry in `boards/boards.lp`, currently `boards/board_1.1/board.lp`) is the design ground truth (outline polygon vertices, mounting drills). Cross-check what the script detects from the STEP against it rather than trusting either alone. The scripts resolve it through `boards/boards.lp`, so renaming a board directory needs no script change.
 - To inspect geometry beyond the exit code: `board_step.py` can be imported normally (put `scripts/` on `sys.path`), but the export scripts must be exec'd with their trailing `run_and_exit(main)` line stripped and `__file__` predefined (a plain import would run main and `os._exit` the interpreter). Then drive their functions directly: census cylinder-face radii, sample wall thickness with `distToShape`, compare volumes against analytic values.

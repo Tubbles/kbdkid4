@@ -31,8 +31,11 @@ MOUNTING_HOLE_DIAMETER_MM = 2.4
 MOUNTING_HOLE_TOLERANCE_MM = 0.1
 
 # The board design sources, for data the STEP does not carry (switch
-# positions; many components have no 3D model).
-BOARD_LP_FILE = "boards/default/board.lp"
+# positions; many components have no 3D model). The board file is the
+# project's default board, the first one listed in boards.lp, which is
+# also what an output job's "(board default)" resolves to (LibrePCB's
+# OutputJobRunner::getBoards takes getBoardByIndex(0)).
+BOARDS_LP_FILE = "boards/boards.lp"
 CIRCUIT_LP_FILE = "circuit/circuit.lp"
 
 # LibrePCB names the board body "PCB" ("PCB1", "PCB2", ... for multiple
@@ -265,31 +268,78 @@ def mounting_hole_centers(board_shape, up, plane_point):
     return sorted(found, key=lambda center: (center.x, center.y))
 
 
-def component_positions(name_pattern):
-    """Positions of placed components whose circuit name matches the
-    pattern, as {name: vector}, joined from the board sources: device
-    positions are keyed by component UUID in the board layout, names
+def default_board_file():
+    """Path of the project's default board file: the first board listed
+    in boards.lp."""
+    boards = open(BOARDS_LP_FILE).read()
+    match = re.search(r"\(board \"([^\"]+)\"\)", boards)
+    if match is None:
+        raise SystemExit(f"error: no board listed in {BOARDS_LP_FILE}")
+    return match.group(1)
+
+
+class Placement:
+    """Where a device sits on the board: position, rotation in degrees
+    and whether it is flipped to the bottom side."""
+
+    def __init__(self, position, rotation_degrees, flipped):
+        self.position = position
+        self.rotation_degrees = rotation_degrees
+        self.flipped = flipped
+
+    def map_point(self, local_point):
+        """A footprint-local point in board coordinates, in LibrePCB's
+        order (Transform::map): mirror across the Y axis when flipped,
+        rotate, then translate."""
+        x, y = local_point.x, local_point.y
+        if self.flipped:
+            x = -x
+        angle = math.radians(self.rotation_degrees)
+        rotated = App.Vector(
+            x * math.cos(angle) - y * math.sin(angle),
+            x * math.sin(angle) + y * math.cos(angle),
+            0.0,
+        )
+        return self.position.add(rotated)
+
+
+def component_placements(name_pattern):
+    """Placements of placed components whose circuit name matches the
+    pattern, as {name: Placement}, joined from the board sources: device
+    placements are keyed by component UUID in the board layout, names
     live in the circuit."""
     circuit = open(CIRCUIT_LP_FILE).read()
-    board = open(BOARD_LP_FILE).read()
+    board = open(default_board_file()).read()
     names = {}
     for match in re.finditer(
         r"\(component ([0-9a-f-]{36})(.*?)\(name \"([^\"]+)\"\)", circuit, re.S
     ):
         names[match.group(1)] = match.group(3)
-    positions = {}
+    placements = {}
     for match in re.finditer(
-        r"\(device ([0-9a-f-]{36})\s.*?\(position ([0-9.-]+) ([0-9.-]+)\)",
+        r"\(device ([0-9a-f-]{36})\s.*?\(position ([0-9.-]+) ([0-9.-]+)\)"
+        r" \(rotation ([0-9.-]+)\) \(flip (true|false)\)",
         board,
         re.S,
     ):
-        positions[match.group(1)] = App.Vector(
-            float(match.group(2)), float(match.group(3)), 0.0
+        placements[match.group(1)] = Placement(
+            App.Vector(float(match.group(2)), float(match.group(3)), 0.0),
+            float(match.group(4)),
+            match.group(5) == "true",
         )
     return {
-        name: positions[uuid]
+        name: placements[uuid]
         for uuid, name in names.items()
-        if name_pattern.fullmatch(name) and uuid in positions
+        if name_pattern.fullmatch(name) and uuid in placements
+    }
+
+
+def component_positions(name_pattern):
+    """Positions of placed components whose circuit name matches the
+    pattern, as {name: vector}."""
+    return {
+        name: placement.position
+        for name, placement in component_placements(name_pattern).items()
     }
 
 
