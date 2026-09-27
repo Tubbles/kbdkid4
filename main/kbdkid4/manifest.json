@@ -85,22 +85,17 @@
     },
     {
       "path": "kbdkid4_v1_Assembly.pdf",
-      "size": 2105675,
-      "category": "pdf"
-    },
-    {
-      "path": "kbdkid4_v1_Copper.pdf",
-      "size": 844304,
+      "size": 2947346,
       "category": "pdf"
     },
     {
       "path": "kbdkid4_v1_Schematic.pdf",
-      "size": 128932,
+      "size": 128926,
       "category": "pdf"
     },
     {
       "path": "kbdkid4_v1.lppz",
-      "size": 4940271,
+      "size": 4938290,
       "category": "archive"
     },
     {
@@ -110,10 +105,10 @@
     },
     {
       "path": "kbdkid4_v1.zip",
-      "size": 191088,
+      "size": 191078,
       "category": "archive"
     }
   ],
   "zip": "kbdkid4.zip",
-  "generatedAt": "2026-09-27T12:04:38.883Z"
+  "generatedAt": "2026-09-27T12:18:56.579Z"
 }
