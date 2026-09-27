@@ -57,14 +57,15 @@ under the board, and the board rests on ledge and standoffs together.
 The well inside the ledge continues the concentric corner treatment
 inward. Set ledge_width to 0 to build without a ledge.
 
-The battery switch (POWER_SWITCH_NAME) protrudes past the board
-outline and the microcontroller's USB connector (MCU_NAME) sits on
-it, so the wall gets a notch cut down from the rim over the outline
-segment nearest each of them: one sized for the switch body, one for
-the USB plug. Both are located via the board sources, since the STEP
-carries no component bodies. At every notch end the neighbouring wall
-slopes down into the notch and the crest where the full wall meets
-the slope is rounded.
+The battery switch (POWER_SWITCH_NAME) and the microcontroller with
+its USB connector (MCU_NAME) are mounted on the board's underside,
+the switch lever reaching through the wall and the connector opening
+onto it, so the wall gets a window cut through it below the board
+over the outline segment nearest each of them: one sized for the
+switch body, one for a USB-C plug. The ledge behind the wall is cut
+away over the same stretch. Both are located via the board sources,
+since the STEP carries no component bodies; their reach below the
+board comes from the package 3D models (see the constants).
 
 The design values live in the constants right below this docstring;
 everything else derives from them.
@@ -108,32 +109,38 @@ DEFAULT_STANDOFF_DIAMETER_MM = 5.8  # insert standoff outer diameter
 DEFAULT_STANDOFF_HOLE_DIAMETER_MM = 3.2  # bore for an M2 heat-set insert
 DEFAULT_LEDGE_WIDTH_MM = 1.0  # PCB support ledge from the cavity wall (0 disables)
 
-# The battery switch protrudes past the board outline, so the wall gets
-# a notch cut down from the rim over the outline segment nearest the
-# switch. The switch position comes from the board sources (the STEP
-# carries no component bodies).
+# The battery switch sits on the board's underside with its lever
+# reaching through the wall, so the wall gets a window over the
+# outline segment nearest the switch, from just below the switch body
+# to just above the board's underside. The switch position comes from
+# the board sources (the STEP carries no component bodies); the body's
+# reach below the board was measured on LibrePCB's STEP export of the
+# populated board, which places the package's 3D model: body 7.7 mm
+# wide, hanging 1.4 mm below the board, lever to 1.3 mm past the
+# outline.
 POWER_SWITCH_NAME = "S1"
-POWER_SWITCH_NOTCH_DEPTH_MM = 3.2  # cut down from the rim
-POWER_SWITCH_NOTCH_WIDTH_MM = 9.3  # along the wall, clears the switch body
+POWER_SWITCH_WINDOW_WIDTH_MM = 9.3  # along the wall, clears the switch body
+POWER_SWITCH_BODY_BELOW_BOARD_MM = 1.4
+WINDOW_MARGIN_MM = 0.5  # switch window edges beyond the body, below and above
 
-# The nice!nano's USB-C connector sits on the board outline, so the
-# wall gets a second notch over the outline segment nearest the
-# connector, wide enough for a USB-C plug overmold (12.35 mm at most
-# per the USB Type-C specification). The connector end is the far end
-# of the nice!nano package along the footprint's +Y axis, measured on
-# the package's 3D model: 18.7 mm from the center of the pin rows,
-# which is the footprint origin.
+# The nice!nano hangs under the board with its USB-C receptacle
+# opening onto the board outline, so the wall gets a second window
+# over the outline segment nearest the connector. It is sized for a
+# USB-C plug's overmold (12.35 x 6.5 mm at most per the USB Type-C
+# specification), not just its shell: the receptacle's mouth sits
+# 0.9 mm behind the wall's outer face and a plug only seats when its
+# overmold can come within a fraction of a millimetre of the mouth.
+# The connector end is the far end of the nice!nano package along the
+# footprint's +Y axis, 18.7 mm from the footprint origin (the center
+# of the pin rows); the receptacle's center lies 3.35 mm below the
+# board's underside (receptacle 1.77 to 4.93 mm below it, the nano
+# board itself 2.75 to 4.15 mm), measured like the switch on the
+# populated STEP export.
 MCU_NAME = "U1"
 MCU_USB_END_OFFSET_MM = 18.7
-USB_NOTCH_DEPTH_MM = 3.2
-USB_NOTCH_WIDTH_MM = 14.0
-
-# At every notch end the neighbouring wall slopes down into the notch
-# at this angle from horizontal (the run derives from the notch
-# depth), and the crest where the full wall meets the slope is
-# rounded.
-NOTCH_RAMP_ANGLE_DEGREES = 60.0
-NOTCH_CREST_RADIUS_MM = 1.0
+USB_RECEPTACLE_CENTER_BELOW_BOARD_MM = 3.35
+USB_WINDOW_WIDTH_MM = 14.0
+USB_WINDOW_HEIGHT_MM = 8.0
 
 # Implementation tuning, rarely worth touching.
 CORNER_FIT_SAFETY = 0.95  # margin on the largest corner radius that fits
@@ -466,18 +473,22 @@ def nearest_outline_segment(segments, position):
     return best[1], best[2], best[3]
 
 
-def cut_rim_notch(
-    tray, outline_wire, up, center_on_edge, direction, width, notch_depth,
-    gap, wall, depth, label,
+def cut_wall_window(
+    tray, outline_wire, up, center_on_edge, direction, width, bottom, top,
+    gap, wall, ledge_width, label,
 ):
-    """Open a notch in the wall's rim: `width` along the wall centered
-    on `center_on_edge`, `notch_depth` down from the rim, spanning the
-    full wall thickness."""
-    outward = notch_outward(outline_wire, center_on_edge, direction, up)
+    """Open a window through the wall and the ledge behind it: `width`
+    along the wall centered on `center_on_edge`, from `bottom` to `top`
+    above the floor, spanning the full wall thickness."""
+    if top <= bottom:
+        raise SystemExit(f"error: the {label} window has no height")
+    outward = wall_outward(outline_wire, center_on_edge, direction, up)
     half_width = width / 2.0
-    inner = -0.5  # start inside the cavity, across the gap
+    height = top - bottom
+    ledge_reach = max(ledge_width - gap, 0.0)  # how far the ledge reaches under the board
+    inner = -(ledge_reach + 0.5)  # start inside the cavity, past the ledge
     outer = gap + wall + 0.5
-    base = center_on_edge.add(up * (depth - notch_depth))
+    base = center_on_edge.add(up * bottom)
     corners = [
         base.add(direction * -half_width).add(outward * inner),
         base.add(direction * half_width).add(outward * inner),
@@ -485,23 +496,35 @@ def cut_rim_notch(
         base.add(direction * -half_width).add(outward * outer),
     ]
     cutter = Part.Face(Part.makePolygon(corners + [corners[0]])).extrude(
-        up * (notch_depth + 1.0)
+        up * height
     )
     volume_before = tray.Volume
     result = tray.cut(cutter)
     if not result.isValid() or len(result.Solids) != 1:
-        raise SystemExit(f"error: cutting the {label} notch broke the solid")
-    if result.Volume >= volume_before:
-        raise SystemExit(f"error: the {label} notch removed no material")
-    wall_probe = center_on_edge.add(outward * (gap + wall / 2.0)).add(
-        up * (depth - 0.1)
-    )
-    if result.Solids[0].isInside(wall_probe, 1e-6, True):
-        raise SystemExit(f"error: the {label} notch did not open the wall rim")
+        raise SystemExit(f"error: cutting the {label} window broke the solid")
+    removed_volume = volume_before - result.Volume
+    wall_volume = wall * width * height
+    if not 0.99 * wall_volume <= removed_volume <= (outer - inner) * width * height:
+        raise SystemExit(
+            f"error: the {label} window removed {removed_volume:.1f} mm3, "
+            f"expected at least the wall's {wall_volume:.1f} mm3; geometry is off"
+        )
+    solid = result.Solids[0]
+    wall_center = center_on_edge.add(outward * (gap + wall / 2.0))
+    middle = (bottom + top) / 2.0
+    if solid.isInside(wall_center.add(up * middle), 1e-6, True):
+        raise SystemExit(f"error: the {label} window did not open the wall")
+    for z, where in ((bottom - 0.3, "below"), (top + 0.3, "above")):
+        if not solid.isInside(wall_center.add(up * z), 1e-6, True):
+            raise SystemExit(f"error: the wall {where} the {label} window is missing")
+    if ledge_reach > 0:
+        ledge_probe = center_on_edge.sub(outward * (ledge_reach / 2.0)).add(up * middle)
+        if solid.isInside(ledge_probe, 1e-6, True):
+            raise SystemExit(f"error: the {label} window left the ledge in place")
     return result
 
 
-def notch_outward(outline_wire, center_on_edge, direction, up):
+def wall_outward(outline_wire, center_on_edge, direction, up):
     """The horizontal direction pointing out of the board at a point on
     the outline, perpendicular to the wall direction there."""
     outward = direction.cross(up)
@@ -514,66 +537,6 @@ def notch_outward(outline_wire, center_on_edge, direction, up):
     if outward.dot(center_on_edge.sub(outline_center)) < 0:
         outward = outward.negative()
     return outward
-
-
-def cut_notch_ramp(
-    tray, outline_wire, up, end_on_outline, away, gap, wall, depth,
-    notch_depth, label,
-):
-    """Slope the wall down into a notch end and round the crest.
-
-    Cuts a wedge so the neighbouring wall descends from full height to
-    the notch floor at NOTCH_RAMP_ANGLE_DEGREES, then fillets the
-    crest edge where the full-height rim meets the slope with
-    NOTCH_CREST_RADIUS_MM. Returns (tray, ramp_run, crest_rounded).
-    """
-    outward = notch_outward(outline_wire, end_on_outline, away, up)
-    inner = -0.5
-    outer = gap + wall + 2.0  # wide, the wall may bend within the ramp
-    floor_z = depth - notch_depth
-    ramp_run = notch_depth / math.tan(math.radians(NOTCH_RAMP_ANGLE_DEGREES))
-    profile = [
-        end_on_outline.add(up * floor_z),
-        end_on_outline.add(up * (depth + 1.0)),
-        end_on_outline.add(away * ramp_run).add(up * (depth + 1.0)),
-        end_on_outline.add(away * ramp_run).add(up * depth),
-    ]
-    face = Part.Face(Part.makePolygon(profile + [profile[0]]))
-    face.translate(outward * inner)
-    cutter = face.extrude(outward * (outer - inner))
-    volume_before = tray.Volume
-    result = tray.cut(cutter)
-    if not result.isValid() or len(result.Solids) != 1:
-        raise SystemExit(f"error: cutting the {label} ramp broke the solid")
-    if result.Volume >= volume_before:
-        raise SystemExit(f"error: the {label} ramp removed no material")
-
-    crest = end_on_outline.add(away * ramp_run).add(up * depth)
-    crest_edges = []
-    for edge in result.Edges:
-        midpoint = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
-        offset = midpoint.sub(crest)
-        if abs(offset.dot(away)) > 0.4 or abs(offset.dot(up)) > 0.4:
-            continue
-        if not -1.0 < offset.dot(outward) < outer:
-            continue
-        tangent = edge.valueAt(edge.LastParameter).sub(
-            edge.valueAt(edge.FirstParameter)
-        )
-        if tangent.Length < 1e-9:
-            continue
-        tangent.normalize()
-        if abs(tangent.dot(away)) > 0.5 or abs(tangent.dot(up)) > 0.5:
-            continue
-        crest_edges.append(edge)
-    if crest_edges:
-        try:
-            rounded = result.makeFillet(NOTCH_CREST_RADIUS_MM, crest_edges)
-            if rounded.isValid() and len(rounded.Solids) == 1:
-                return rounded, ramp_run, True
-        except Part.OCCError:
-            pass
-    return result, ramp_run, False
 
 
 def build_tray(outline_wire, up, gap, wall, floor, depth, ledge_width, ledge_height):
@@ -723,23 +686,28 @@ def main():
             "board sources"
         )
     segments = outline_straight_segments(resting_face.OuterWire)
-    _switch_index, switch_notch_center, switch_direction = nearest_outline_segment(
+    _switch_index, switch_window_center, switch_direction = nearest_outline_segment(
         segments, switch_by_name[POWER_SWITCH_NAME]
     )
-    tray = cut_rim_notch(
+    board_underside = arguments.standoff_height  # the board rests on the standoffs
+    switch_window_bottom = (
+        board_underside - POWER_SWITCH_BODY_BELOW_BOARD_MM - WINDOW_MARGIN_MM
+    )
+    switch_window_top = board_underside + WINDOW_MARGIN_MM
+    tray = cut_wall_window(
         tray,
         resting_face.OuterWire,
         up,
-        switch_notch_center,
+        switch_window_center,
         switch_direction,
-        POWER_SWITCH_NOTCH_WIDTH_MM,
-        POWER_SWITCH_NOTCH_DEPTH_MM,
+        POWER_SWITCH_WINDOW_WIDTH_MM,
+        switch_window_bottom,
+        switch_window_top,
         arguments.gap,
         arguments.wall,
-        arguments.depth,
+        arguments.ledge_width,
         "switch",
     )
-
     mcu_by_name = component_placements(re.compile(re.escape(MCU_NAME)))
     if MCU_NAME not in mcu_by_name:
         raise SystemExit(
@@ -748,56 +716,26 @@ def main():
     usb_end = mcu_by_name[MCU_NAME].map_point(
         App.Vector(0.0, MCU_USB_END_OFFSET_MM, 0.0)
     )
-    _usb_index, usb_notch_center, usb_direction = nearest_outline_segment(
+    _usb_index, usb_window_center, usb_direction = nearest_outline_segment(
         segments, usb_end
     )
-    tray = cut_rim_notch(
+    usb_window_middle = board_underside - USB_RECEPTACLE_CENTER_BELOW_BOARD_MM
+    usb_window_bottom = usb_window_middle - USB_WINDOW_HEIGHT_MM / 2.0
+    usb_window_top = usb_window_middle + USB_WINDOW_HEIGHT_MM / 2.0
+    tray = cut_wall_window(
         tray,
         resting_face.OuterWire,
         up,
-        usb_notch_center,
+        usb_window_center,
         usb_direction,
-        USB_NOTCH_WIDTH_MM,
-        USB_NOTCH_DEPTH_MM,
+        USB_WINDOW_WIDTH_MM,
+        usb_window_bottom,
+        usb_window_top,
         arguments.gap,
         arguments.wall,
-        arguments.depth,
+        arguments.ledge_width,
         "usb",
     )
-    ramp_ends = []
-    for center, direction, width, notch_depth, label in (
-        (
-            switch_notch_center,
-            switch_direction,
-            POWER_SWITCH_NOTCH_WIDTH_MM,
-            POWER_SWITCH_NOTCH_DEPTH_MM,
-            "switch",
-        ),
-        (usb_notch_center, usb_direction, USB_NOTCH_WIDTH_MM, USB_NOTCH_DEPTH_MM, "usb"),
-    ):
-        for sign in (-1.0, 1.0):
-            away = direction * sign
-            ramp_ends.append((
-                center.add(direction * (sign * width / 2.0)),
-                away,
-                notch_depth,
-                f"{label} notch's {compass_name(away)} end",
-            ))
-    crest_results = []
-    for end_on_outline, away, notch_depth, label in ramp_ends:
-        tray, ramp_run, crest_rounded = cut_notch_ramp(
-            tray,
-            resting_face.OuterWire,
-            up,
-            end_on_outline,
-            away,
-            arguments.gap,
-            arguments.wall,
-            arguments.depth,
-            notch_depth,
-            label,
-        )
-        crest_results.append((label, ramp_run, crest_rounded))
     mesh = export_stl(tray, arguments.stl_file)
 
     board_box = board_shape.BoundBox
@@ -820,32 +758,18 @@ def main():
         print(f"ledge:      {arguments.ledge_width} mm wide along the cavity wall, "
               f"{arguments.standoff_height} mm tall, "
               f"{arguments.ledge_width - arguments.gap:.2f} mm under the board edge")
-    print(f"notch:      {POWER_SWITCH_NOTCH_WIDTH_MM} x "
-          f"{POWER_SWITCH_NOTCH_DEPTH_MM} mm rim cut for {POWER_SWITCH_NAME} "
-          f"at the wall segment near ({switch_notch_center.x:.2f}, "
-          f"{switch_notch_center.y:.2f})")
-    print(f"notch:      {USB_NOTCH_WIDTH_MM} x {USB_NOTCH_DEPTH_MM} mm rim cut "
-          f"for the USB plug at the wall segment nearest {MCU_NAME}'s connector "
-          f"end ({usb_end.x:.2f}, {usb_end.y:.2f}), centered near "
-          f"({usb_notch_center.x:.2f}, {usb_notch_center.y:.2f})")
-    for label, ramp_run, crest_rounded in crest_results:
-        crest_note = (
-            f"crest rounded r{NOTCH_CREST_RADIUS_MM}"
-            if crest_rounded
-            else "crest left sharp (fillet failed)"
-        )
-        print(f"ramp:       {NOTCH_RAMP_ANGLE_DEGREES:.0f} degree slope "
-              f"({ramp_run:.2f} mm run) into the notch at the {label}, "
-              f"{crest_note}")
+    print(f"window:     {POWER_SWITCH_WINDOW_WIDTH_MM} x "
+          f"{switch_window_top - switch_window_bottom:.1f} mm through the wall "
+          f"for {POWER_SWITCH_NAME}'s lever at the wall segment near "
+          f"({switch_window_center.x:.2f}, {switch_window_center.y:.2f}), "
+          f"{switch_window_bottom:.2f} to {switch_window_top:.2f} mm above the "
+          f"floor (board underside at {board_underside:.2f} mm)")
+    print(f"window:     {USB_WINDOW_WIDTH_MM} x {USB_WINDOW_HEIGHT_MM} mm through "
+          f"the wall for the USB-C plug at the wall segment nearest "
+          f"{MCU_NAME}'s connector end ({usb_end.x:.2f}, {usb_end.y:.2f}), "
+          f"centered near ({usb_window_center.x:.2f}, {usb_window_center.y:.2f}), "
+          f"{usb_window_bottom:.2f} to {usb_window_top:.2f} mm above the floor")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
-
-
-def compass_name(direction):
-    """north/south/east/west for a horizontal direction, by its
-    dominant axis; only used to label the printout."""
-    if abs(direction.x) >= abs(direction.y):
-        return "east" if direction.x > 0 else "west"
-    return "north" if direction.y > 0 else "south"
 
 
 def axis_name(axis):
