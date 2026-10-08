@@ -86,10 +86,12 @@ MCU_NAME = "U1"
 MCU_TAB_EXTENSION_MM = 2.5
 
 # The corner extension: bounded on the inside by the switch column's
-# east edge and the thumb cell's top edge (both silhouette edges), on
-# the outside by the board outline plus CORNER_OVERHANG_MM, which like
+# east edge and the thumb cell's top edge (both silhouette edges), to
+# the east by the board outline plus CORNER_OVERHANG_MM, which like
 # the tab ends 0.05 mm short of the tray wall at its default 0.4 mm
-# gap. Every drill up to LEAD_DRILL_MAX_DIAMETER_MM in that corner is
+# gap, and to the north by the switch column's top edge, so it stays
+# flush with the cells beside it rather than following the outline
+# there. Every drill up to LEAD_DRILL_MAX_DIAMETER_MM in that corner is
 # a through-hole lead (the board's other drills there are the 2.4 mm
 # mounting drill); each gets a frustum recess from the underside,
 # LEAD_CONE_BASE_DIAMETER_MM wide at the underside narrowing to
@@ -327,9 +329,10 @@ def extend_corner(plate, outline_wire, tab_y_range):
     """Cover the switch-less corner of the board with a slab from the
     switch column's east edge (the rightmost vertical silhouette edge
     above the thumb cell) and the thumb cell's top edge out to the
-    board outline plus CORNER_OVERHANG_MM. The slab abuts the cells
-    and the tab without overlapping them, like the cells abut each
-    other. Returns (plate, slab, west_x, south_y).
+    board outline plus CORNER_OVERHANG_MM, but no further north than
+    the column's top edge. The slab abuts the cells and the tab
+    without overlapping them, like the cells abut each other. Returns
+    (plate, slab, west_x, south_y, north_y).
     """
     _y_low, south_y = tab_y_range
     box = plate.BoundBox
@@ -344,24 +347,35 @@ def extend_corner(plate, outline_wire, tab_y_range):
             continue
         if start.x < plate_center_x:
             continue
-        candidates.append(start.x)
+        candidates.append((start.x, max(start.y, end.y)))
     if not candidates:
         raise SystemExit(
             "error: no vertical silhouette edge above the thumb cell to "
             "extend the corner from"
         )
-    west_x = max(candidates)
+    west_x, north_y = max(candidates)
     prism = Part.Face(offset_outline(outline_wire, CORNER_OVERHANG_MM)).extrude(
         App.Vector(0, 0, box.ZLength)
     )
     prism.translate(App.Vector(0, 0, box.ZMin))
     region = Part.makeBox(
-        200.0, 200.0, box.ZLength, App.Vector(west_x, south_y, box.ZMin)
+        200.0, north_y - south_y, box.ZLength, App.Vector(west_x, south_y, box.ZMin)
     )
     slab = prism.common(region)
     if len(slab.Solids) != 1 or slab.Volume <= 0:
         raise SystemExit("error: the corner extension is not a single solid")
-    return Part.makeCompound(list(plate.Solids) + [slab]), slab, west_x, south_y
+    if abs(slab.BoundBox.YMax - north_y) > 0.01:
+        raise SystemExit(
+            f"error: the corner extension reaches y {slab.BoundBox.YMax:.2f}, "
+            f"not the column's top edge at {north_y:.2f}"
+        )
+    return (
+        Part.makeCompound(list(plate.Solids) + [slab]),
+        slab,
+        west_x,
+        south_y,
+        north_y,
+    )
 
 
 def inside_any(compound, point):
@@ -503,7 +517,7 @@ def main():
     plate.translate(alignment)
     plate = trim_outer_edges(plate, PLATE_EDGE_TRIM_MM)
     plate, tab_edge_x, tab_y_range = extend_mcu_tab(plate)
-    plate, slab, corner_west_x, corner_south_y = extend_corner(
+    plate, slab, corner_west_x, corner_south_y, corner_north_y = extend_corner(
         plate, resting_face.OuterWire, tab_y_range
     )
     lead_centers = [
@@ -534,9 +548,9 @@ def main():
           f"y {tab_y_range[0]:.2f}..{tab_y_range[1]:.2f}")
     slab_box = slab.BoundBox
     print(f"corner:     covered from x {corner_west_x:.2f} and y {corner_south_y:.2f} "
-          f"to the outline plus {CORNER_OVERHANG_MM} mm "
-          f"(x to {slab_box.XMax:.2f}, y to {slab_box.YMax:.2f}), "
-          f"{slab.Volume / box.ZLength:.0f} mm2")
+          f"to the outline plus {CORNER_OVERHANG_MM} mm eastward (x to "
+          f"{slab_box.XMax:.2f}) and to the column's top edge at y "
+          f"{corner_north_y:.2f}, {slab.Volume / box.ZLength:.0f} mm2")
     print(f"cones:      {len(lead_centers)} lead recesses in the corner, "
           f"{LEAD_CONE_BASE_DIAMETER_MM} mm at the underside narrowing to "
           f"{LEAD_CONE_TOP_DIAMETER_MM} mm, {cone_height:.2f} mm tall, "
