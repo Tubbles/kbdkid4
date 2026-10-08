@@ -227,18 +227,18 @@ def project_to_plane(point, plane_point, normal):
     return point.sub(normal * normal.dot(point.sub(plane_point)))
 
 
-def mounting_hole_centers(board_shape, up, plane_point):
-    """Centers of the board's mounting drills, projected onto the given
-    plane.
+def drill_centers(board_shape, up, plane_point, min_diameter, max_diameter):
+    """The board's drills with a diameter in the given range, as
+    (center, diameter) pairs with the centers projected onto the given
+    plane, sorted by position.
 
-    A mounting drill appears in the board solid as cylindrical faces of
-    the configured diameter with their axis along the board normal,
-    together spanning the full circle. The full-circle test excludes
-    outline corner arcs; the diameter tolerance excludes pad drills and
-    vias (this board's other drills are 0.3, 0.5 and 2.0 mm).
+    A drill appears in the board solid as cylindrical faces with their
+    axis along the board normal, together spanning the full circle. The
+    full-circle test excludes outline corner arcs.
     """
     angular_spans = {}
     centers = {}
+    diameters = {}
     for face in board_shape.Faces:
         surface = face.Surface
         if not isinstance(surface, Part.Cylinder):
@@ -246,7 +246,7 @@ def mounting_hole_centers(board_shape, up, plane_point):
         if abs(surface.Axis.dot(up)) < 0.999:
             continue
         diameter = 2.0 * surface.Radius
-        if abs(diameter - MOUNTING_HOLE_DIAMETER_MM) > MOUNTING_HOLE_TOLERANCE_MM:
+        if not min_diameter <= diameter <= max_diameter:
             continue
         center = project_to_plane(surface.Center, plane_point, up)
         key = (round(center.x, 2), round(center.y, 2), round(center.z, 2))
@@ -255,17 +255,35 @@ def mounting_hole_centers(board_shape, up, plane_point):
             parameter_range[1] - parameter_range[0]
         )
         centers[key] = center
+        diameters[key] = diameter
     found = [
-        centers[key]
+        (centers[key], diameters[key])
         for key, span in angular_spans.items()
         if span > 1.9 * math.pi
+    ]
+    return sorted(found, key=lambda pair: (pair[0].x, pair[0].y))
+
+
+def mounting_hole_centers(board_shape, up, plane_point):
+    """Centers of the board's mounting drills, projected onto the given
+    plane: the drills of the configured diameter, within tolerance,
+    which excludes pad drills and vias."""
+    found = [
+        center
+        for center, _diameter in drill_centers(
+            board_shape,
+            up,
+            plane_point,
+            MOUNTING_HOLE_DIAMETER_MM - MOUNTING_HOLE_TOLERANCE_MM,
+            MOUNTING_HOLE_DIAMETER_MM + MOUNTING_HOLE_TOLERANCE_MM,
+        )
     ]
     if not found:
         raise SystemExit(
             f"error: no {MOUNTING_HOLE_DIAMETER_MM} mm mounting holes found "
             "in the board"
         )
-    return sorted(found, key=lambda center: (center.x, center.y))
+    return found
 
 
 def default_board_file():

@@ -12,6 +12,14 @@ anything but a pure translation, and then trims the plate's outer
 edges so it fits the tray. Below the microcontroller, next to the
 thumb key column, the plate extends sideways to the tray wall.
 
+The board's top right corner, the microcontroller area, has no switch
+cells, so the plate extends over it to cover the whole board. The
+through-hole parts soldered on the board's underside (the nice!nano,
+the battery connector) have their leads sticking up there, so the
+extension's underside gets a conical recess at every lead drill found
+in the STEP, stopping PLATE_SKIN_MM short of the top face so nothing
+shows through. The reset pushbutton gets a plain hole.
+
 Plain through holes for the mounting screws are drilled where the
 board has its mounting drills, detected in the kbdkid4 STEP exactly
 like the tray places its standoffs, so the plate holes always track
@@ -40,6 +48,7 @@ import Part
 from board_step import (
     MOUNTING_HOLE_DIAMETER_MM,
     component_positions,
+    drill_centers,
     export_stl,
     find_board,
     import_assembly,
@@ -75,6 +84,24 @@ PLATE_EDGE_TRIM_MM = 0.4
 # edge that lies below the MCU.
 MCU_NAME = "U1"
 MCU_TAB_EXTENSION_MM = 2.5
+
+# The corner extension: bounded on the inside by the switch column's
+# east edge and the thumb cell's top edge (both silhouette edges), on
+# the outside by the board outline plus CORNER_OVERHANG_MM, which like
+# the tab ends 0.05 mm short of the tray wall at its default 0.4 mm
+# gap. Every drill up to LEAD_DRILL_MAX_DIAMETER_MM in that corner is
+# a through-hole lead (the board's other drills there are the 2.4 mm
+# mounting drill); each gets a frustum recess from the underside,
+# LEAD_CONE_BASE_DIAMETER_MM wide at the underside narrowing to
+# LEAD_CONE_TOP_DIAMETER_MM, reaching to PLATE_SKIN_MM below the top
+# face. The reset pushbutton gets a plain through hole.
+CORNER_OVERHANG_MM = 0.35
+LEAD_DRILL_MAX_DIAMETER_MM = 1.5
+LEAD_CONE_BASE_DIAMETER_MM = 2.5
+LEAD_CONE_TOP_DIAMETER_MM = 1.0
+PLATE_SKIN_MM = 0.2
+RESET_SWITCH_NAME = "S3"
+RESET_SWITCH_HOLE_DIAMETER_MM = 10.0
 
 # Below this much surrounding plate material a cut is a clearance
 # cutout in mostly open plate area rather than a supported screw hole
@@ -296,6 +323,130 @@ def extend_mcu_tab(plate):
     )
 
 
+def extend_corner(plate, outline_wire, tab_y_range):
+    """Cover the switch-less corner of the board with a slab from the
+    switch column's east edge (the rightmost vertical silhouette edge
+    above the thumb cell) and the thumb cell's top edge out to the
+    board outline plus CORNER_OVERHANG_MM. The slab abuts the cells
+    and the tab without overlapping them, like the cells abut each
+    other. Returns (plate, slab, west_x, south_y).
+    """
+    _y_low, south_y = tab_y_range
+    box = plate.BoundBox
+    plate_center_x = (box.XMin + box.XMax) / 2.0
+    candidates = []
+    for edge in plate_silhouette_bottom_face(plate).OuterWire.Edges:
+        start = edge.valueAt(edge.FirstParameter)
+        end = edge.valueAt(edge.LastParameter)
+        if abs(start.x - end.x) > 0.01:
+            continue
+        if min(start.y, end.y) < south_y - 0.01:
+            continue
+        if start.x < plate_center_x:
+            continue
+        candidates.append(start.x)
+    if not candidates:
+        raise SystemExit(
+            "error: no vertical silhouette edge above the thumb cell to "
+            "extend the corner from"
+        )
+    west_x = max(candidates)
+    prism = Part.Face(offset_outline(outline_wire, CORNER_OVERHANG_MM)).extrude(
+        App.Vector(0, 0, box.ZLength)
+    )
+    prism.translate(App.Vector(0, 0, box.ZMin))
+    region = Part.makeBox(
+        200.0, 200.0, box.ZLength, App.Vector(west_x, south_y, box.ZMin)
+    )
+    slab = prism.common(region)
+    if len(slab.Solids) != 1 or slab.Volume <= 0:
+        raise SystemExit("error: the corner extension is not a single solid")
+    return Part.makeCompound(list(plate.Solids) + [slab]), slab, west_x, south_y
+
+
+def inside_any(compound, point):
+    return any(solid.isInside(point, 1e-6, True) for solid in compound.Solids)
+
+
+def cut_lead_cones(plate, lead_centers):
+    """Cut a frustum recess into the plate's underside at each lead,
+    leaving PLATE_SKIN_MM of the top face. Returns (plate, height)."""
+    box = plate.BoundBox
+    height = box.ZLength - PLATE_SKIN_MM
+    if height <= 0:
+        raise SystemExit("error: the plate is thinner than the skin above the cones")
+    base_radius = LEAD_CONE_BASE_DIAMETER_MM / 2.0
+    top_radius = LEAD_CONE_TOP_DIAMETER_MM / 2.0
+    slope = (base_radius - top_radius) / height
+    extra = 1.0  # the frustum continues below the underside for a clean cut
+    cones = [
+        Part.makeCone(
+            base_radius + slope * extra,
+            top_radius,
+            height + extra,
+            App.Vector(center.x, center.y, box.ZMin - extra),
+            App.Vector(0, 0, 1),
+        )
+        for center in lead_centers
+    ]
+    volume_before = plate.Volume
+    cut = plate.cut(Part.makeCompound(cones))
+    removed_volume = volume_before - cut.Volume
+    frustum_volume = (
+        math.pi * height / 3.0
+        * (base_radius**2 + base_radius * top_radius + top_radius**2)
+    )
+    expected_volume = len(lead_centers) * frustum_volume
+    if abs(removed_volume - expected_volume) > 0.01 * expected_volume:
+        raise SystemExit(
+            f"error: the lead cones removed {removed_volume:.2f} mm3, expected "
+            f"{expected_volume:.2f} mm3; a cone is not fully inside the plate"
+        )
+    for center in lead_centers:
+        skin = App.Vector(center.x, center.y, box.ZMax - PLATE_SKIN_MM / 2.0)
+        if not inside_any(cut, skin):
+            raise SystemExit(
+                f"error: the cone at ({center.x:.2f}, {center.y:.2f}) broke "
+                "through the plate's top"
+            )
+        recess = App.Vector(center.x, center.y, box.ZMin + 0.3)
+        if inside_any(cut, recess):
+            raise SystemExit(
+                f"error: the cone at ({center.x:.2f}, {center.y:.2f}) did not "
+                "open the underside"
+            )
+    return cut, height
+
+
+def cut_reset_hole(plate):
+    """Cut a plain through hole for the reset pushbutton. Returns
+    (plate, center)."""
+    reset_by_name = component_positions(re.compile(re.escape(RESET_SWITCH_NAME)))
+    if RESET_SWITCH_NAME not in reset_by_name:
+        raise SystemExit(
+            f"error: reset switch '{RESET_SWITCH_NAME}' not found in the board sources"
+        )
+    center = reset_by_name[RESET_SWITCH_NAME]
+    box = plate.BoundBox
+    radius = RESET_SWITCH_HOLE_DIAMETER_MM / 2.0
+    hole = Part.makeCylinder(
+        radius,
+        box.ZLength + 2.0,
+        App.Vector(center.x, center.y, box.ZMin - 1.0),
+        App.Vector(0, 0, 1),
+    )
+    volume_before = plate.Volume
+    cut = plate.cut(hole)
+    removed_volume = volume_before - cut.Volume
+    expected_volume = math.pi * radius**2 * box.ZLength
+    if abs(removed_volume - expected_volume) > 0.01 * expected_volume:
+        raise SystemExit(
+            f"error: the reset hole removed {removed_volume:.2f} mm3, expected "
+            f"{expected_volume:.2f} mm3; it is not fully inside plate material"
+        )
+    return cut, center
+
+
 def drill_holes(plate, hole_centers, hole_diameter):
     """Cut a plain through hole at each center and return the drilled
     plate along with each hole's material support fraction.
@@ -352,6 +503,21 @@ def main():
     plate.translate(alignment)
     plate = trim_outer_edges(plate, PLATE_EDGE_TRIM_MM)
     plate, tab_edge_x, tab_y_range = extend_mcu_tab(plate)
+    plate, slab, corner_west_x, corner_south_y = extend_corner(
+        plate, resting_face.OuterWire, tab_y_range
+    )
+    lead_centers = [
+        center
+        for center, _diameter in drill_centers(
+            board_shape, up, resting_face.Surface.Position,
+            0.0, LEAD_DRILL_MAX_DIAMETER_MM,
+        )
+        if center.x >= corner_west_x and center.y >= corner_south_y
+    ]
+    if not lead_centers:
+        raise SystemExit("error: no lead drills found in the corner extension")
+    plate, cone_height = cut_lead_cones(plate, lead_centers)
+    plate, reset_center = cut_reset_hole(plate)
     box = plate.BoundBox
     plate, supports = drill_holes(plate, hole_centers, arguments.hole_diameter)
     mesh = export_stl(plate, arguments.stl_file)
@@ -366,6 +532,17 @@ def main():
     print(f"tab:        {MCU_TAB_EXTENSION_MM} mm extension below {MCU_NAME} to "
           f"the tray wall, x {tab_edge_x:.2f} -> {tab_edge_x + MCU_TAB_EXTENSION_MM:.2f}, "
           f"y {tab_y_range[0]:.2f}..{tab_y_range[1]:.2f}")
+    slab_box = slab.BoundBox
+    print(f"corner:     covered from x {corner_west_x:.2f} and y {corner_south_y:.2f} "
+          f"to the outline plus {CORNER_OVERHANG_MM} mm "
+          f"(x to {slab_box.XMax:.2f}, y to {slab_box.YMax:.2f}), "
+          f"{slab.Volume / box.ZLength:.0f} mm2")
+    print(f"cones:      {len(lead_centers)} lead recesses in the corner, "
+          f"{LEAD_CONE_BASE_DIAMETER_MM} mm at the underside narrowing to "
+          f"{LEAD_CONE_TOP_DIAMETER_MM} mm, {cone_height:.2f} mm tall, "
+          f"{PLATE_SKIN_MM} mm of plate left above them")
+    print(f"reset:      {RESET_SWITCH_HOLE_DIAMETER_MM} mm hole for "
+          f"{RESET_SWITCH_NAME} at ({reset_center.x:.2f}, {reset_center.y:.2f})")
     for center, support in zip(hole_centers, supports):
         note = ""
         if support < SUPPORTED_HOLE_THRESHOLD:
