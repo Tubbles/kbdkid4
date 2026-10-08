@@ -67,6 +67,15 @@ away over the same stretch. Both are located via the board sources,
 since the STEP carries no component bodies; their reach below the
 board comes from the package 3D models (see the constants).
 
+The hotswap sockets hang under the board too, and in the switch
+column along the west edge each socket ends in a narrow tab that
+reaches the board outline, where the ledge would sit. Every socket
+whose tab reaches into the ledge gets a notch cut into the ledge,
+through its full width, LEDGE_NOTCH_WIDTH_MM along the wall and
+LEDGE_NOTCH_DEPTH_MM down from the ledge top. Which sockets qualify
+follows from the switch placements in the board sources, so the
+notches track the layout.
+
 The design values live in the constants right below this docstring;
 everything else derives from them.
 """
@@ -141,6 +150,24 @@ MCU_USB_END_OFFSET_MM = 18.7
 USB_RECEPTACLE_CENTER_BELOW_BOARD_MM = 3.35
 USB_WINDOW_WIDTH_MM = 14.0
 USB_WINDOW_HEIGHT_MM = 8.0
+
+# The key switches' hotswap sockets (Kailh Choc PG1350 with the
+# CPG135001S001 socket) hang 2.0 mm under the board, and each ends in
+# a 1.7 mm wide tab whose tip lies at the given footprint coordinates,
+# measured on LibrePCB's populated STEP export. In the column along
+# the west edge that tip reaches 0.2 mm past the board outline, into
+# the ledge, so the ledge gets a notch there: LEDGE_NOTCH_WIDTH_MM
+# along the wall centered on the tip, LEDGE_NOTCH_DEPTH_MM down from
+# the ledge top (the socket plus solder needs 2 mm of each), through
+# the ledge's full width. A socket qualifies when its tip comes within
+# LEDGE_NOTCH_CLEARANCE_MM of the ledge's inner face. Only switches
+# whose sockets face the cavity count: those on the side away from the
+# opening.
+KEY_SWITCH_NAME_PATTERN = re.compile(r"S[0-9]{3}")
+HOTSWAP_SOCKET_TAB_TIP_MM = (-3.70, 9.28)
+LEDGE_NOTCH_WIDTH_MM = 3.0
+LEDGE_NOTCH_DEPTH_MM = 3.0
+LEDGE_NOTCH_CLEARANCE_MM = 0.5
 
 # Implementation tuning, rarely worth touching.
 CORNER_FIT_SAFETY = 0.95  # margin on the largest corner radius that fits
@@ -524,6 +551,62 @@ def cut_wall_window(
     return result
 
 
+def cut_ledge_notch(
+    tray, outline_wire, up, center_on_edge, direction, width, depth, ledge_top,
+    gap, wall, ledge_width, label,
+):
+    """Cut a notch into the ledge, leaving the wall alone: `width`
+    along the wall centered on `center_on_edge`, `depth` down from the
+    ledge top, through the ledge's full width up to the wall's inner
+    face."""
+    outward = wall_outward(outline_wire, center_on_edge, direction, up)
+    ledge_reach = ledge_width - gap  # how far the ledge reaches under the board
+    half_width = width / 2.0
+    inner = -(ledge_reach + 0.5)  # start inside the cavity, past the ledge
+    outer = gap  # the wall's inner face
+    base = center_on_edge.add(up * (ledge_top - depth))
+    corners = [
+        base.add(direction * -half_width).add(outward * inner),
+        base.add(direction * half_width).add(outward * inner),
+        base.add(direction * half_width).add(outward * outer),
+        base.add(direction * -half_width).add(outward * outer),
+    ]
+    cutter = Part.Face(Part.makePolygon(corners + [corners[0]])).extrude(
+        up * (depth + CAVITY_CUT_EXTRA_MM)
+    )
+    volume_before = tray.Volume
+    result = tray.cut(cutter)
+    if not result.isValid() or len(result.Solids) != 1:
+        raise SystemExit(f"error: cutting the {label} ledge notch broke the solid")
+    removed_volume = volume_before - result.Volume
+    expected_volume = ledge_width * width * depth
+    if abs(removed_volume - expected_volume) > 0.02 * expected_volume:
+        raise SystemExit(
+            f"error: the {label} ledge notch removed {removed_volume:.2f} mm3, "
+            f"expected {expected_volume:.2f} mm3; geometry is off"
+        )
+    solid = result.Solids[0]
+    ledge_middle = outward * ((gap - ledge_reach) / 2.0)
+    middle_z = ledge_top - depth / 2.0
+
+    def ledge_probe(along, z):
+        return center_on_edge.add(direction * along).add(ledge_middle).add(up * z)
+
+    if solid.isInside(ledge_probe(0.0, middle_z), 1e-6, True):
+        raise SystemExit(f"error: the {label} ledge notch did not open the ledge")
+    wall_probe = center_on_edge.add(outward * (gap + wall / 2.0)).add(up * middle_z)
+    if not solid.isInside(wall_probe, 1e-6, True):
+        raise SystemExit(f"error: the {label} ledge notch cut into the wall")
+    for along, z, where in (
+        (-(half_width + 0.3), middle_z, "beside"),
+        (half_width + 0.3, middle_z, "beside"),
+        (0.0, ledge_top - depth - 0.3, "below"),
+    ):
+        if not solid.isInside(ledge_probe(along, z), 1e-6, True):
+            raise SystemExit(f"error: the ledge {where} the {label} notch is missing")
+    return result
+
+
 def wall_outward(outline_wire, center_on_edge, direction, up):
     """The horizontal direction pointing out of the board at a point on
     the outline, perpendicular to the wall direction there."""
@@ -736,6 +819,37 @@ def main():
         arguments.ledge_width,
         "usb",
     )
+    ledge_notches = []
+    if arguments.ledge_width > arguments.gap:
+        ledge_reach = arguments.ledge_width - arguments.gap
+        switches = component_placements(KEY_SWITCH_NAME_PATTERN)
+        for name in sorted(switches):
+            placement = switches[name]
+            if placement.flipped == open_toward_positive_axis:
+                continue  # its socket faces the opening, not the cavity
+            tip = placement.map_point(App.Vector(*HOTSWAP_SOCKET_TAB_TIP_MM, 0.0))
+            _index, closest, direction = nearest_outline_segment(segments, tip)
+            if abs(direction.dot(tip.sub(closest))) > 1e-6:
+                continue  # nearest to a corner, not alongside a straight wall
+            outward = wall_outward(resting_face.OuterWire, closest, direction, up)
+            past_edge = outward.dot(tip.sub(closest))
+            if past_edge < -(ledge_reach + LEDGE_NOTCH_CLEARANCE_MM):
+                continue
+            tray = cut_ledge_notch(
+                tray,
+                resting_face.OuterWire,
+                up,
+                closest,
+                direction,
+                LEDGE_NOTCH_WIDTH_MM,
+                LEDGE_NOTCH_DEPTH_MM,
+                board_underside,
+                arguments.gap,
+                arguments.wall,
+                arguments.ledge_width,
+                f"{name} socket",
+            )
+            ledge_notches.append((name, closest, past_edge))
     mesh = export_stl(tray, arguments.stl_file)
 
     board_box = board_shape.BoundBox
@@ -769,6 +883,11 @@ def main():
           f"{MCU_NAME}'s connector end ({usb_end.x:.2f}, {usb_end.y:.2f}), "
           f"centered near ({usb_window_center.x:.2f}, {usb_window_center.y:.2f}), "
           f"{usb_window_bottom:.2f} to {usb_window_top:.2f} mm above the floor")
+    for name, closest, past_edge in ledge_notches:
+        print(f"ledge notch: {LEDGE_NOTCH_WIDTH_MM} x {LEDGE_NOTCH_DEPTH_MM} mm for "
+              f"{name}'s socket at ({closest.x:.2f}, {closest.y:.2f}); the socket "
+              f"tab ends {past_edge:+.2f} mm past the board edge, "
+              f"{arguments.gap - past_edge:.2f} mm from the wall")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
