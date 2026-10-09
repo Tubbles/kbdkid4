@@ -42,9 +42,11 @@ jobs:
           fi
           mkdir -p tray
           for step_file in "${step_files[@]}"; do
-            stl_file="tray/$(basename "${step_file%.step}")_Tray.stl"
+            base="tray/$(basename "${step_file%.step}")"
             docker run --rm -v "$PWD":/work -w /work freecad-headless \
-              freecadcmd scripts/export_tray.py --pass "$step_file" "$stl_file"
+              freecadcmd scripts/export_tray.py --pass "$step_file" "${base}_Tray_Left.stl"
+            docker run --rm -v "$PWD":/work -w /work freecad-headless \
+              freecadcmd scripts/export_tray.py --pass "$step_file" "${base}_Tray_Right.stl" right
           done
       - name: Upload tray STL
         uses: actions/upload-artifact@v4
@@ -60,7 +62,10 @@ jobs:
             base="plate/$(basename "${step_file%.step}")"
             docker run --rm -v "$PWD":/work -w /work freecad-headless \
               freecadcmd scripts/export_plate.py --pass "$step_file" \
-              resources/kbdkid3-plate-left.FCStd "${base}_Plate.stl"
+              resources/kbdkid3-plate-left.FCStd "${base}_Plate_Left.stl"
+            docker run --rm -v "$PWD":/work -w /work freecad-headless \
+              freecadcmd scripts/export_plate.py --pass "$step_file" \
+              resources/kbdkid3-plate-left.FCStd "${base}_Plate_Right.stl" right
           done
       - name: Upload plate STL
         uses: actions/upload-artifact@v4

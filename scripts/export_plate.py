@@ -2,8 +2,10 @@
 
 The plate model is reused from kbdkid3: a parametric switch cell
 replicated by a point array into the left plate, with a mirrored right
-plate alongside in the same document. Only the left plate is exported;
-the right half is mirrored in the slicer, like the tray.
+plate alongside in the same document. The left plate is what gets
+exported; the word "right" mirrors the finished export across the
+board's center line for the other half, since the board is reversible
+and the right half is the left one turned over.
 
 The kbdkid3 plate does not share the kbdkid4 board's origin. The
 script aligns it by matching the plate's switch cutout centers to the
@@ -119,8 +121,10 @@ SUPPORTED_HOLE_THRESHOLD = 0.5
 
 USAGE = f"""\
 usage: freecadcmd scripts/export_plate.py --pass <pcb.step> <plate.fcstd>
-           <plate.stl> [hole_diameter={PLATE_HOLE_DIAMETER_MM}]
+           <plate.stl> [right] [hole_diameter={PLATE_HOLE_DIAMETER_MM}]
 
+  right          export the right half: the plate mirrored across the
+                 board's center line
   hole_diameter  clearance holes over the screw heads, mm (the measured
                  {SCREW_HEAD_DIAMETER_MM} mm head plus \
 {SCREW_HEAD_CLEARANCE_MM} mm)\
@@ -133,13 +137,16 @@ class Arguments:
         self.fcstd_file = None
         self.stl_file = None
         self.hole_diameter = PLATE_HOLE_DIAMETER_MM
+        self.right = False
 
 
 def parse_arguments(argument_list):
     arguments = Arguments()
     positionals = []
     for argument in argument_list:
-        if "=" in argument:
+        if argument == "right":
+            arguments.right = True
+        elif "=" in argument:
             key, _, value = argument.partition("=")
             if key != "hole_diameter":
                 raise SystemExit(f"error: unknown option '{key}'\n{USAGE}")
@@ -477,6 +484,27 @@ def turn_upside_down(plate, lead_centers):
     return plate
 
 
+def mirror_for_right_half(plate, lead_centers):
+    """Mirror the plate across the YZ plane through its center: the
+    right half's plate, since the board is reversible and that half
+    is the left one turned over, cells, screw holes, lead recesses and
+    reset hole included. Returns (plate, lead centers) both mirrored.
+
+    This has to run before turn_upside_down: Shape.mirror works on
+    the geometry and drops a placement set by rotate or translate
+    (observed on FreeCAD 1.0), which would silently undo the turn.
+    """
+    center = plate.BoundBox.Center
+    volume_before = plate.Volume
+    mirrored = plate.mirror(center, App.Vector(1, 0, 0))
+    if not mirrored.isValid() or abs(mirrored.Volume - volume_before) > 1e-6 * volume_before:
+        raise SystemExit("error: mirroring the plate changed its volume")
+    mirrored_leads = [
+        App.Vector(2.0 * center.x - lead.x, lead.y, lead.z) for lead in lead_centers
+    ]
+    return mirrored, mirrored_leads
+
+
 def drill_holes(plate, hole_centers, hole_diameter):
     """Cut a plain through hole at each center and return the drilled
     plate along with each hole's material support fraction.
@@ -550,6 +578,8 @@ def main():
     plate, reset_center = cut_reset_hole(plate)
     box = plate.BoundBox
     plate, supports = drill_holes(plate, hole_centers, arguments.hole_diameter)
+    if arguments.right:
+        plate, lead_centers = mirror_for_right_half(plate, lead_centers)
     plate = turn_upside_down(plate, lead_centers)
     mesh = export_stl(plate, arguments.stl_file)
 
@@ -581,6 +611,7 @@ def main():
         print(f"hole:       ({center.x:9.4f}, {center.y:8.4f}) "
               f"{arguments.hole_diameter} mm, {support * 100.0:5.1f} % "
               f"supported{note}")
+    print(f"half:       {'right, mirrored across the board center line' if arguments.right else 'left'}")
     print(f"print:      written upside down, top face on z = 0 and the lead "
           f"recesses opening upward, {plate.BoundBox.ZLength:.2f} mm tall")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")

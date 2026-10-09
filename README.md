@@ -16,11 +16,11 @@ Generated outputs (gerbers, BOM, schematic and assembly PDFs, STEP model) live i
 
 The parameters (gap, wall, floor, depth, standoff and ledge dimensions) and their defaults are listed in the script's usage header and constants block.
 
-`scripts/export_plate.py` likewise exports the switch plate: the kbdkid3 plate model (`resources/kbdkid3-plate-left.FCStd`), aligned onto the board by matching its switch cutouts to the board's switch grid, trimmed at the outer edges to fit the tray, extended over the microcontroller corner so it covers the whole board (with a conical recess on the underside at every soldered lead, 0.2 mm short of the top face, and a hole for the reset button), and cut with head-sized clearance holes at the board's mounting drills: the screws clamp the PCB onto the standoffs, the plate sits over their heads and is held down by the switches. The plate STL is written upside down (top face on the bed, lead recesses opening upward) so it prints as is without supports. Only the left plate is exported; both it and the tray get mirrored in the slicer for the other keyboard half. CI uploads it as the `plate-stl` artifact.
+`scripts/export_plate.py` likewise exports the switch plate: the kbdkid3 plate model (`resources/kbdkid3-plate-left.FCStd`), aligned onto the board by matching its switch cutouts to the board's switch grid, trimmed at the outer edges to fit the tray, extended over the microcontroller corner so it covers the whole board (with a conical recess on the underside at every soldered lead, 0.2 mm short of the top face, and a hole for the reset button), and cut with head-sized clearance holes at the board's mounting drills: the screws clamp the PCB onto the standoffs, the plate sits over their heads and is held down by the switches. The plate STL is written upside down (top face on the bed, lead recesses opening upward) so it prints as is without supports. CI exports both halves as the `plate-stl` artifact: `_Plate_Left.stl`, and `_Plate_Right.stl` mirrored across the board's center line (the word `right`).
 
 CI runs this against the freshly generated STEP and uploads the result as the `tray-stl` workflow artifact.
 
-The STL's orientation is not critical: the tray gets mirrored in the slicer anyway, since the split keyboard needs both mirrored halves.
+CI exports both halves as the `tray-stl` artifact: `_Tray_Left.stl` as described, and `_Tray_Right.stl` built with the board's other side up (the word `right`), where the right half's switches and hotswap sockets sit, then turned over so it prints opening-up. That is not a mirror of the left tray: the right half's sockets do not reach the board edge, so that tray has no ledge notches.
 
 ## 3D printed PCB replica
 
@@ -29,7 +29,7 @@ The STL's orientation is not critical: the tray gets mirrored in the slicer anyw
     docker run --rm -v "$PWD":/work -w /work freecad-headless \
         freecadcmd scripts/export_pcb.py --pass output/v1/kbdkid4_v1.step pcb.stl [pull_in=0.2] [thickness=1.6]
 
-CI uploads it as the `pcb-stl` artifact. Like the tray, it is mirrored in the slicer for the other half.
+CI uploads it as the `pcb-stl` artifact. One file serves both halves: the bare board's mirror image is the board itself turned over.
 
 ## License
 

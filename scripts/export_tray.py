@@ -7,7 +7,7 @@ option parser intercepts dash-prefixed arguments even after "--pass"
 (observed on FreeCAD 1.0.0):
 
     freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl> \
-        [key=value ...] [flip]
+        [key=value ...] [flip] [right]
 
 The key=value parameter names and their defaults are listed in the
 USAGE text and the constants block below.
@@ -30,6 +30,14 @@ protrude the furthest, so the bare(r) side rests on the tray floor; a
 bare-board STEP (no component bodies) opens toward the board's top
 side. Pass the word "flip" to override. The tray is positioned in
 board coordinates: the cavity floor touches the board's resting face.
+
+The right half uses the same board turned over, so its tray is the
+same build with the board's other side up (the word "right"), where
+that half's switches and hotswap sockets sit; afterwards the tray is
+turned through 180 degrees about the X axis so it prints opening-up
+like the left one. That is not a mirror of the left tray: the sockets
+that reach the ledge on the left half do not on the right, so the
+right tray has no ledge notches.
 
 Every corner, convex or concave, bends with the same pair of
 concentric radii: the corner radius on the outside of the bend and
@@ -179,7 +187,7 @@ SHARPEN_MAX_CORNER_RADIUS_MM = 3.0  # outline arcs above this are not corners
 USAGE = f"""\
 usage: freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl>
            [gap={DEFAULT_GAP_MM}] [wall={DEFAULT_WALL_MM}] \
-[floor={DEFAULT_FLOOR_MM}] [depth={DEFAULT_DEPTH_MM}] [flip]
+[floor={DEFAULT_FLOOR_MM}] [depth={DEFAULT_DEPTH_MM}] [flip] [right]
            [standoff_height={DEFAULT_STANDOFF_HEIGHT_MM}] \
 [standoff_diameter={DEFAULT_STANDOFF_DIAMETER_MM}] \
 [standoff_hole_diameter={DEFAULT_STANDOFF_HOLE_DIAMETER_MM}] \
@@ -190,6 +198,8 @@ usage: freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl>
   floor   tray floor thickness, mm
   depth   cavity depth from the floor's top to the rim, mm
   flip    open the cavity toward the opposite side of the automatic choice
+  right   build the right half's tray: the board's other side up (that
+          half's switches and sockets), turned opening-up for printing
   standoff_height         insert standoff height above the floor, mm
   standoff_diameter       insert standoff outer diameter, mm
   standoff_hole_diameter  bore for the heat-set insert, mm
@@ -211,6 +221,7 @@ class Arguments:
         self.standoff_hole_diameter = DEFAULT_STANDOFF_HOLE_DIAMETER_MM
         self.ledge_width = DEFAULT_LEDGE_WIDTH_MM
         self.flip = False
+        self.right = False
 
 
 def parse_arguments(argument_list):
@@ -229,6 +240,8 @@ def parse_arguments(argument_list):
     for argument in argument_list:
         if argument == "flip":
             arguments.flip = True
+        elif argument == "right":
+            arguments.right = True
         elif "=" in argument:
             key, _, value = argument.partition("=")
             if key not in numeric_keys:
@@ -607,6 +620,23 @@ def cut_ledge_notch(
     return result
 
 
+def turn_for_printing(tray, up, floor, depth):
+    """Turn a tray built opening-down through 180 degrees about the X
+    axis so it prints opening-up, and put its floor's underside at
+    -floor like a tray built opening-up."""
+    if up.z > 0:
+        return tray
+    tray.rotate(tray.BoundBox.Center, App.Vector(1, 0, 0), 180)
+    tray.translate(App.Vector(0, 0, -floor - tray.BoundBox.ZMin))
+    box = tray.BoundBox
+    if abs(box.ZMin + floor) > 0.01 or abs(box.ZMax - depth) > 0.01:
+        raise SystemExit(
+            f"error: the turned tray spans z {box.ZMin:.2f}..{box.ZMax:.2f}, "
+            f"expected {-floor:.2f}..{depth:.2f}"
+        )
+    return tray
+
+
 def wall_outward(outline_wire, center_on_edge, direction, up):
     """The horizontal direction pointing out of the board at a point on
     the outline, perpendicular to the wall direction there."""
@@ -736,6 +766,8 @@ def main():
         open_toward_positive_axis = above > below
     if arguments.flip:
         open_toward_positive_axis = not open_toward_positive_axis
+    if arguments.right:
+        open_toward_positive_axis = not open_toward_positive_axis
     resting_face, up = pick_resting_face(
         outline_face_pair, open_toward_positive_axis
     )
@@ -850,6 +882,8 @@ def main():
                 f"{name} socket",
             )
             ledge_notches.append((name, closest, past_edge))
+    if arguments.right:
+        tray = turn_for_printing(tray, up, arguments.floor, arguments.depth)
     mesh = export_stl(tray, arguments.stl_file)
 
     board_box = board_shape.BoundBox
@@ -857,7 +891,8 @@ def main():
           f"{thickness:.2f} mm thick, outline face {outline_face_pair[0].Area:.1f} mm2")
     print(f"components: protrude {above:.2f} mm above / {below:.2f} mm below the board")
     print(f"opening:    toward {'+' if up.dot(axis) > 0 else '-'}{axis_name(axis)}"
-          f"{' (flipped)' if arguments.flip else ''}")
+          f"{' (flipped)' if arguments.flip else ''}"
+          f"{' (right half: built with the board turned over, then turned opening-up for printing)' if arguments.right else ''}")
     print(f"tray:       gap {arguments.gap} mm, wall {arguments.wall} mm, "
           f"floor {arguments.floor} mm, depth {arguments.depth} mm "
           f"({arguments.floor + arguments.depth:.1f} mm overall), "
@@ -883,6 +918,8 @@ def main():
           f"{MCU_NAME}'s connector end ({usb_end.x:.2f}, {usb_end.y:.2f}), "
           f"centered near ({usb_window_center.x:.2f}, {usb_window_center.y:.2f}), "
           f"{usb_window_bottom:.2f} to {usb_window_top:.2f} mm above the floor")
+    if not ledge_notches:
+        print("ledge notch: none, no socket tab reaches the ledge on this half")
     for name, closest, past_edge in ledge_notches:
         print(f"ledge notch: {LEDGE_NOTCH_WIDTH_MM} x {LEDGE_NOTCH_DEPTH_MM} mm for "
               f"{name}'s socket at ({closest.x:.2f}, {closest.y:.2f}); the socket "
