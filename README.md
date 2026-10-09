@@ -27,9 +27,9 @@ CI exports both halves as the `tray-stl` artifact: `_Tray_Left.stl` as described
 `scripts/export_pcb.py` exports a printable stand-in for the bare board, for test-fitting the tray, plate, switches and screws before the fabricated boards arrive: the outline extruded to the board thickness with every drill hole, no components. Printed parts come out slightly larger than modelled, so the replica is pulled in by `pull_in` (default 0.2 mm) per side: the outline moves inward and every hole grows outward by that much. The thickness stays as modelled unless overridden with `thickness=`.
 
     docker run --rm -v "$PWD":/work -w /work freecad-headless \
-        freecadcmd scripts/export_pcb.py --pass output/v1/kbdkid4_v1.step pcb.stl [pull_in=0.2] [thickness=1.6]
+        freecadcmd scripts/export_pcb.py --pass output/v1/kbdkid4_v1.step pcb.stl [right] [pull_in=0.2] [thickness=1.6]
 
-CI uploads it as the `pcb-stl` artifact. One file serves both halves: the bare board's mirror image is the board itself turned over.
+CI uploads both halves as the `pcb-stl` artifact: `_Pcb_Left.stl`, and `_Pcb_Right.stl` mirrored across the board's center line (the word `right`). A bare board turned over would be its own mirror image, but a print is not: its bed side and its top side come out with different surfaces.
 
 ## License
 

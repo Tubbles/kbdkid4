@@ -17,10 +17,13 @@ Runs headless under FreeCAD's console interpreter (see board_step.py
 for the freecadcmd quirks that shape the invocation):
 
     freecadcmd scripts/export_pcb.py --pass <pcb.step> <replica.stl> \
-        [pull_in=0.2] [thickness=<from the STEP>]
+        [right] [pull_in=0.2] [thickness=<from the STEP>]
 
 The replica sits in board coordinates like the tray, its resting face
-on the board's resting face.
+on the board's resting face. The word "right" mirrors it across the
+board's center line for the right half: a bare board turned over is
+its own mirror image, but a print is not, since its bed side and its
+top side come out with different surfaces.
 """
 
 import os
@@ -28,6 +31,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import FreeCAD as App
 import Part
 
 from board_step import (
@@ -49,8 +53,10 @@ CUT_EXTRA_MM = 1.0  # opening cutters overshoot both faces for a clean cut
 
 USAGE = f"""\
 usage: freecadcmd scripts/export_pcb.py --pass <pcb.step> <replica.stl>
-           [pull_in={DEFAULT_PULL_IN_MM}] [thickness=<from the STEP>]
+           [right] [pull_in={DEFAULT_PULL_IN_MM}] [thickness=<from the STEP>]
 
+  right      export the right half: the replica mirrored across the board's
+             center line, so the printed top side is the right one
   pull_in    swelling allowance per side, mm: the outline moves inward and
              every hole or cutout grows outward by this much
   thickness  replica thickness, mm (default: the board's, from the STEP)\
@@ -63,13 +69,16 @@ class Arguments:
         self.stl_file = None
         self.pull_in = DEFAULT_PULL_IN_MM
         self.thickness = None
+        self.right = False
 
 
 def parse_arguments(argument_list):
     arguments = Arguments()
     positionals = []
     for argument in argument_list:
-        if "=" in argument:
+        if argument == "right":
+            arguments.right = True
+        elif "=" in argument:
             key, _, value = argument.partition("=")
             if key not in ("pull_in", "thickness"):
                 raise SystemExit(f"error: unknown option '{key}'\n{USAGE}")
@@ -129,6 +138,15 @@ def validate_replica(replica, outline, openings, thickness):
         )
 
 
+def mirror_for_right_half(replica):
+    """Mirror the replica across the YZ plane through its center."""
+    volume_before = replica.Volume
+    mirrored = replica.mirror(replica.BoundBox.Center, App.Vector(1, 0, 0))
+    if not mirrored.isValid() or abs(mirrored.Volume - volume_before) > 1e-6 * volume_before:
+        raise SystemExit("error: mirroring the replica changed its volume")
+    return mirrored
+
+
 def circle_diameter(wire):
     """The diameter of a wire that is one full circle, else None."""
     radii = set()
@@ -168,6 +186,8 @@ def main():
 
     outline, openings = replica_wires(resting_face, arguments.pull_in)
     replica = build_replica(outline, openings, up, thickness)
+    if arguments.right:
+        replica = mirror_for_right_half(replica)
     mesh = export_stl(replica, arguments.stl_file)
 
     board_box = resting_face.OuterWire.BoundBox
@@ -183,6 +203,7 @@ def main():
               f"{diameter + 2.0 * arguments.pull_in:.2f} mm")
     if cutouts:
         print(f"cutouts:    {cutouts} grown {arguments.pull_in} mm outward")
+    print(f"half:       {'right, mirrored across the board center line' if arguments.right else 'left'}")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 

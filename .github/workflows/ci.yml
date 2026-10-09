@@ -78,9 +78,11 @@ jobs:
           shopt -s globstar nullglob
           mkdir -p pcb
           for step_file in librepcb-ci-output/**/*.step; do
+            base="pcb/$(basename "${step_file%.step}")"
             docker run --rm -v "$PWD":/work -w /work freecad-headless \
-              freecadcmd scripts/export_pcb.py --pass "$step_file" \
-              "pcb/$(basename "${step_file%.step}")_Pcb.stl"
+              freecadcmd scripts/export_pcb.py --pass "$step_file" "${base}_Pcb_Left.stl"
+            docker run --rm -v "$PWD":/work -w /work freecad-headless \
+              freecadcmd scripts/export_pcb.py --pass "$step_file" "${base}_Pcb_Right.stl" right
           done
       - name: Upload PCB replica STL
         uses: actions/upload-artifact@v4
