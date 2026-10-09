@@ -25,6 +25,14 @@ shows through. The reset pushbutton gets a plain hole.
 The STL is written upside down, top face on z = 0 and the recesses
 opening upward, so it prints as is without supports.
 
+Finally the whole pattern of switch cutouts, screw holes, lead
+recesses and the reset hole is shifted along +X by pattern_shift
+(default DEFAULT_PATTERN_SHIFT_MM) while the outline stays exactly
+where it is: the first printed plates sat right in the tray but their
+holes drifted off the board's features toward the nice!nano side, by
+about a millimetre at the far end, and a shift of half that splits
+the error. The cause of the drift is still open (SUGGESTIONS.md).
+
 The screws clamp the PCB onto the tray's standoffs and the plate sits
 over their heads, held down by the switches, so head-sized clearance
 holes are cut where the board has its mounting drills, detected in
@@ -112,6 +120,11 @@ PLATE_SKIN_MM = 0.2
 RESET_SWITCH_NAME = "S3"
 RESET_SWITCH_HOLE_DIAMETER_MM = 10.0
 
+# Shift of the whole hole pattern along +X relative to the outline, in
+# mm, applied last (before the turn and the mirror). On the right half
+# it mirrors along with everything else, toward that half's nano side.
+DEFAULT_PATTERN_SHIFT_MM = 0.5
+
 # Below this much surrounding plate material a cut is a clearance
 # cutout in mostly open plate area rather than a supported screw hole
 # (one mounting position lands at a four-cell junction cutout). Only
@@ -122,9 +135,13 @@ SUPPORTED_HOLE_THRESHOLD = 0.5
 USAGE = f"""\
 usage: freecadcmd scripts/export_plate.py --pass <pcb.step> <plate.fcstd>
            <plate.stl> [right] [hole_diameter={PLATE_HOLE_DIAMETER_MM}]
+           [pattern_shift={DEFAULT_PATTERN_SHIFT_MM}]
 
   right          export the right half: the plate mirrored across the
                  board's center line
+  pattern_shift  move every cutout, hole and recess this far along +X
+                 (toward the nice!nano side on the left half) while the
+                 outline stays put, mm
   hole_diameter  clearance holes over the screw heads, mm (the measured
                  {SCREW_HEAD_DIAMETER_MM} mm head plus \
 {SCREW_HEAD_CLEARANCE_MM} mm)\
@@ -137,6 +154,7 @@ class Arguments:
         self.fcstd_file = None
         self.stl_file = None
         self.hole_diameter = PLATE_HOLE_DIAMETER_MM
+        self.pattern_shift = DEFAULT_PATTERN_SHIFT_MM
         self.right = False
 
 
@@ -148,10 +166,10 @@ def parse_arguments(argument_list):
             arguments.right = True
         elif "=" in argument:
             key, _, value = argument.partition("=")
-            if key != "hole_diameter":
+            if key not in ("hole_diameter", "pattern_shift"):
                 raise SystemExit(f"error: unknown option '{key}'\n{USAGE}")
             try:
-                arguments.hole_diameter = float(value)
+                setattr(arguments, key, float(value))
             except ValueError:
                 raise SystemExit(f"error: '{key}' needs a number, got '{value}'")
         else:
@@ -484,6 +502,54 @@ def turn_upside_down(plate, lead_centers):
     return plate
 
 
+def shift_pattern(plate, shift):
+    """Move every cutout, hole and recess by `shift` along +X while the
+    outline stays where it is: translate the plate, clip it back to its
+    original silhouette, and fill the strips that open along the edges
+    it moved away from. Returns the plate."""
+    if shift == 0:
+        return plate
+    box = plate.BoundBox
+    outline = plate_silhouette_bottom_face(plate).OuterWire
+    prism = Part.Face(outline).extrude(App.Vector(0, 0, box.ZLength + 2.0))
+    prism.translate(App.Vector(0, 0, box.ZMin - 1.0 - outline.BoundBox.ZMin))
+    moved_prism = prism.copy()
+    moved_prism.translate(App.Vector(shift, 0, 0))
+    moved = plate.copy()
+    moved.translate(App.Vector(shift, 0, 0))
+    # Clip solid by solid: a common() of the whole compound silently
+    # drops a cell (observed on FreeCAD 1.0), the per-solid ones do not.
+    clipped_solids = []
+    for solid in moved.Solids:
+        clipped_solids.extend(solid.common(prism).Solids)
+    clipped = Part.makeCompound(clipped_solids)
+    fill = prism.cut(moved_prism)
+    # The prism overshoots the plate's faces by 1 mm; trim the fill to
+    # the plate's own thickness.
+    fill = fill.common(Part.makeBox(
+        box.XLength + 2.0, box.YLength + 2.0, box.ZLength,
+        App.Vector(box.XMin - 1.0, box.YMin - 1.0, box.ZMin),
+    ))
+    result = Part.makeCompound(list(clipped.Solids) + list(fill.Solids))
+    new_box = result.BoundBox
+    for before, after, axis in (
+        (box.XMin, new_box.XMin, "x min"), (box.XMax, new_box.XMax, "x max"),
+        (box.YMin, new_box.YMin, "y min"), (box.YMax, new_box.YMax, "y max"),
+    ):
+        if abs(before - after) > 0.01:
+            raise SystemExit(
+                f"error: shifting the pattern moved the outline's {axis} from "
+                f"{before:.3f} to {after:.3f}"
+            )
+    if abs(result.Volume - plate.Volume) > 0.005 * plate.Volume:
+        raise SystemExit(
+            f"error: shifting the pattern changed the plate volume from "
+            f"{plate.Volume:.1f} to {result.Volume:.1f} mm3; a hole must sit "
+            "within the shift of an edge"
+        )
+    return result
+
+
 def mirror_for_right_half(plate, lead_centers):
     """Mirror the plate across the YZ plane through its center: the
     right half's plate, since the board is reversible and that half
@@ -578,6 +644,11 @@ def main():
     plate, reset_center = cut_reset_hole(plate)
     box = plate.BoundBox
     plate, supports = drill_holes(plate, hole_centers, arguments.hole_diameter)
+    plate = shift_pattern(plate, arguments.pattern_shift)
+    lead_centers = [
+        App.Vector(lead.x + arguments.pattern_shift, lead.y, lead.z)
+        for lead in lead_centers
+    ]
     if arguments.right:
         plate, lead_centers = mirror_for_right_half(plate, lead_centers)
     plate = turn_upside_down(plate, lead_centers)
@@ -611,6 +682,8 @@ def main():
         print(f"hole:       ({center.x:9.4f}, {center.y:8.4f}) "
               f"{arguments.hole_diameter} mm, {support * 100.0:5.1f} % "
               f"supported{note}")
+    print(f"shift:      hole pattern moved {arguments.pattern_shift:+.2f} mm along x "
+          f"relative to the outline, which stays put")
     print(f"half:       {'right, mirrored across the board center line' if arguments.right else 'left'}")
     print(f"print:      written upside down, top face on z = 0 and the lead "
           f"recesses opening upward, {plate.BoundBox.ZLength:.2f} mm tall")
