@@ -23,13 +23,14 @@ shows through. The reset pushbutton gets a plain hole.
 The STL is written upside down, top face on z = 0 and the recesses
 opening upward, so it prints as is without supports.
 
-Plain through holes for the mounting screws are drilled where the
-board has its mounting drills, detected in the kbdkid4 STEP exactly
-like the tray places its standoffs, so the plate holes always track
-the PCB. Every position is cut, even where it sits mostly in open
-plate area (one lands at a four-cell junction cutout): whatever
-sliver of material protrudes into the screw's path must go. The
-printout reports how much plate material surrounds each hole.
+The screws clamp the PCB onto the tray's standoffs and the plate sits
+over their heads, held down by the switches, so head-sized clearance
+holes are cut where the board has its mounting drills, detected in
+the kbdkid4 STEP exactly like the tray places its standoffs, so the
+plate holes always track the PCB. Every position is cut, even one
+that sits mostly in open plate area: whatever sliver of material
+protrudes into the screw's path must go. The printout reports how
+much plate material surrounds each hole.
 
 Runs headless under FreeCAD's console interpreter (see board_step.py
 for the freecadcmd quirks that shape the invocation):
@@ -49,7 +50,6 @@ import FreeCAD as App
 import Part
 
 from board_step import (
-    MOUNTING_HOLE_DIAMETER_MM,
     component_positions,
     drill_centers,
     export_stl,
@@ -66,10 +66,12 @@ from board_step import (
 # its mirror and is not exported).
 PLATE_OBJECT_NAME = "PointArray"
 
-# For the variant where the screws clamp the PCB and the plate goes on
-# top of them, the holes must swallow the screw heads instead.
+# The screws clamp the PCB onto the tray's standoffs and the plate sits
+# over their heads, held down by the switches, so the plate's holes
+# swallow the heads.
 SCREW_HEAD_DIAMETER_MM = 3.77  # measured
 SCREW_HEAD_CLEARANCE_MM = 0.4  # extra so a printed hole clears the head
+PLATE_HOLE_DIAMETER_MM = SCREW_HEAD_DIAMETER_MM + SCREW_HEAD_CLEARANCE_MM
 
 # The kbdkid3 plate does not share the kbdkid4 board's origin, so the
 # script aligns it by matching the plate's switch cutout centers to the
@@ -117,13 +119,11 @@ SUPPORTED_HOLE_THRESHOLD = 0.5
 
 USAGE = f"""\
 usage: freecadcmd scripts/export_plate.py --pass <pcb.step> <plate.fcstd>
-           <plate.stl> [heads] [hole_diameter={MOUNTING_HOLE_DIAMETER_MM}]
+           <plate.stl> [hole_diameter={PLATE_HOLE_DIAMETER_MM}]
 
-  heads          drill for the screw heads instead of the threads, for
-                 the stack where the screws clamp the PCB and the plate
-                 sits above them ({SCREW_HEAD_DIAMETER_MM} + \
-{SCREW_HEAD_CLEARANCE_MM} mm)
-  hole_diameter  drill for the mounting screws, mm\
+  hole_diameter  clearance holes over the screw heads, mm (the measured
+                 {SCREW_HEAD_DIAMETER_MM} mm head plus \
+{SCREW_HEAD_CLEARANCE_MM} mm)\
 """
 
 
@@ -132,18 +132,14 @@ class Arguments:
         self.step_file = None
         self.fcstd_file = None
         self.stl_file = None
-        self.hole_diameter = MOUNTING_HOLE_DIAMETER_MM
+        self.hole_diameter = PLATE_HOLE_DIAMETER_MM
 
 
 def parse_arguments(argument_list):
     arguments = Arguments()
     positionals = []
     for argument in argument_list:
-        if argument == "heads":
-            arguments.hole_diameter = (
-                SCREW_HEAD_DIAMETER_MM + SCREW_HEAD_CLEARANCE_MM
-            )
-        elif "=" in argument:
+        if "=" in argument:
             key, _, value = argument.partition("=")
             if key != "hole_diameter":
                 raise SystemExit(f"error: unknown option '{key}'\n{USAGE}")
