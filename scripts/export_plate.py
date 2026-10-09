@@ -20,6 +20,9 @@ extension's underside gets a conical recess at every lead drill found
 in the STEP, stopping PLATE_SKIN_MM short of the top face so nothing
 shows through. The reset pushbutton gets a plain hole.
 
+The STL is written upside down, top face on z = 0 and the recesses
+opening upward, so it prints as is without supports.
+
 Plain through holes for the mounting screws are drilled where the
 board has its mounting drills, detected in the kbdkid4 STEP exactly
 like the tray places its standoffs, so the plate holes always track
@@ -461,6 +464,23 @@ def cut_reset_hole(plate):
     return cut, center
 
 
+def turn_upside_down(plate, lead_centers):
+    """Rotate the plate 180 degrees about the X axis through its center
+    and drop it onto z = 0, so it prints with its top face on the bed
+    and the lead recesses opening upward. Returns the flipped plate."""
+    center = plate.BoundBox.Center
+    plate.rotate(center, App.Vector(1, 0, 0), 180)
+    plate.translate(App.Vector(0, 0, -plate.BoundBox.ZMin))
+    box = plate.BoundBox
+    for lead in lead_centers:
+        flipped = App.Vector(lead.x, 2.0 * center.y - lead.y, 0.0)
+        if not inside_any(plate, flipped.add(App.Vector(0, 0, PLATE_SKIN_MM / 2.0))):
+            raise SystemExit("error: after flipping, the skin above a recess is not at the bottom")
+        if inside_any(plate, flipped.add(App.Vector(0, 0, box.ZMax - 0.3))):
+            raise SystemExit("error: after flipping, a recess does not open at the top")
+    return plate
+
+
 def drill_holes(plate, hole_centers, hole_diameter):
     """Cut a plain through hole at each center and return the drilled
     plate along with each hole's material support fraction.
@@ -534,6 +554,7 @@ def main():
     plate, reset_center = cut_reset_hole(plate)
     box = plate.BoundBox
     plate, supports = drill_holes(plate, hole_centers, arguments.hole_diameter)
+    plate = turn_upside_down(plate, lead_centers)
     mesh = export_stl(plate, arguments.stl_file)
 
     print(f"board:      {board_description}, {len(hole_centers)} mounting drills")
@@ -564,6 +585,8 @@ def main():
         print(f"hole:       ({center.x:9.4f}, {center.y:8.4f}) "
               f"{arguments.hole_diameter} mm, {support * 100.0:5.1f} % "
               f"supported{note}")
+    print(f"print:      written upside down, top face on z = 0 and the lead "
+          f"recesses opening upward, {plate.BoundBox.ZLength:.2f} mm tall")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
