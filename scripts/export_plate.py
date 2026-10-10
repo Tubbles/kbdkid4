@@ -29,9 +29,10 @@ Finally the whole pattern of switch cutouts, screw holes, lead
 recesses and the reset hole is shifted along +X by pattern_shift
 (default DEFAULT_PATTERN_SHIFT_MM) while the outline stays exactly
 where it is: the first printed plates sat right in the tray but their
-holes drifted off the board's features toward the nice!nano side, by
-about a millimetre at the far end, and a shift of half that splits
-the error. The cause of the drift is still open (SUGGESTIONS.md).
+holes drifted off the board's features toward the nice!nano side, and
+a plate printed with a 0.5 mm shift came out offset about as far the
+other way, so 0.25 mm is the current try. The cause of the drift is
+still open (SUGGESTIONS.md).
 
 The screws clamp the PCB onto the tray's standoffs and the plate sits
 over their heads, held down by the switches, so head-sized clearance
@@ -123,7 +124,7 @@ RESET_SWITCH_HOLE_DIAMETER_MM = 10.0
 # Shift of the whole hole pattern along +X relative to the outline, in
 # mm, applied last (before the turn and the mirror). On the right half
 # it mirrors along with everything else, toward that half's nano side.
-DEFAULT_PATTERN_SHIFT_MM = 0.5
+DEFAULT_PATTERN_SHIFT_MM = 0.25
 
 # Below this much surrounding plate material a cut is a clearance
 # cutout in mostly open plate area rather than a supported screw hole
