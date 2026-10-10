@@ -34,6 +34,10 @@ a plate printed with a 0.5 mm shift came out offset about as far the
 other way, so 0.25 mm is the current try. The cause of the drift is
 still open (SUGGESTIONS.md).
 
+Last, side_shave (default DEFAULT_SIDE_SHAVE_MM) comes off the
+plate's west and east edges: the printed plate is a snug fit
+across the tray's width.
+
 The screws clamp the PCB onto the tray's standoffs and the plate sits
 over their heads, held down by the switches, so head-sized clearance
 holes are cut where the board has its mounting drills, detected in
@@ -126,6 +130,12 @@ RESET_SWITCH_HOLE_DIAMETER_MM = 10.0
 # it mirrors along with everything else, toward that half's nano side.
 DEFAULT_PATTERN_SHIFT_MM = 0.25
 
+# The printed plate is a snug fit across the tray's width; take this
+# much off the plate's west and east edges (its extremes along x) at
+# the very end, so it comes out 2 x DEFAULT_SIDE_SHAVE_MM narrower.
+# The north and south edges stay as they are.
+DEFAULT_SIDE_SHAVE_MM = 0.1
+
 # Below this much surrounding plate material a cut is a clearance
 # cutout in mostly open plate area rather than a supported screw hole
 # (one mounting position lands at a four-cell junction cutout). Only
@@ -137,12 +147,14 @@ USAGE = f"""\
 usage: freecadcmd scripts/export_plate.py --pass <pcb.step> <plate.fcstd>
            <plate.stl> [right] [hole_diameter={PLATE_HOLE_DIAMETER_MM}]
            [pattern_shift={DEFAULT_PATTERN_SHIFT_MM}]
+           [side_shave={DEFAULT_SIDE_SHAVE_MM}]
 
   right          export the right half: the plate mirrored across the
                  board's center line
   pattern_shift  move every cutout, hole and recess this far along +X
                  (toward the nice!nano side on the left half) while the
                  outline stays put, mm
+  side_shave     take this much off the plate's west and east edges, mm
   hole_diameter  clearance holes over the screw heads, mm (the measured
                  {SCREW_HEAD_DIAMETER_MM} mm head plus \
 {SCREW_HEAD_CLEARANCE_MM} mm)\
@@ -156,6 +168,7 @@ class Arguments:
         self.stl_file = None
         self.hole_diameter = PLATE_HOLE_DIAMETER_MM
         self.pattern_shift = DEFAULT_PATTERN_SHIFT_MM
+        self.side_shave = DEFAULT_SIDE_SHAVE_MM
         self.right = False
 
 
@@ -167,7 +180,7 @@ def parse_arguments(argument_list):
             arguments.right = True
         elif "=" in argument:
             key, _, value = argument.partition("=")
-            if key not in ("hole_diameter", "pattern_shift"):
+            if key not in ("hole_diameter", "pattern_shift", "side_shave"):
                 raise SystemExit(f"error: unknown option '{key}'\n{USAGE}")
             try:
                 setattr(arguments, key, float(value))
@@ -551,6 +564,49 @@ def shift_pattern(plate, shift):
     return result
 
 
+def shave_sides(plate, shave):
+    """Take `shave` off the plate's west and east edges (its extremes
+    along x), leaving the north and south edges and the hole pattern
+    where they are. Returns the plate."""
+    if shave == 0:
+        return plate
+    box = plate.BoundBox
+    keep = Part.makeBox(
+        box.XLength - 2.0 * shave, box.YLength + 2.0, box.ZLength + 2.0,
+        App.Vector(box.XMin + shave, box.YMin - 1.0, box.ZMin - 1.0),
+    )
+    # What should go: the silhouette prism outside the kept box, which
+    # equals the plate there as long as no cutout reaches a side edge.
+    outline = plate_silhouette_bottom_face(plate).OuterWire
+    silhouette = Part.Face(outline).extrude(App.Vector(0, 0, box.ZLength))
+    silhouette.translate(App.Vector(0, 0, box.ZMin - outline.BoundBox.ZMin))
+    expected_removed = silhouette.cut(keep).Volume
+    # Clip solid by solid, as in shift_pattern.
+    kept = []
+    for solid in plate.Solids:
+        kept.extend(solid.common(keep).Solids)
+    shaved = Part.makeCompound(kept)
+    new_box = shaved.BoundBox
+    for expected, actual, axis in (
+        (box.XMin + shave, new_box.XMin, "x min"),
+        (box.XMax - shave, new_box.XMax, "x max"),
+        (box.YMin, new_box.YMin, "y min"),
+        (box.YMax, new_box.YMax, "y max"),
+    ):
+        if abs(expected - actual) > 0.01:
+            raise SystemExit(
+                f"error: shaving the sides put the outline's {axis} at "
+                f"{actual:.3f}, expected {expected:.3f}"
+            )
+    removed = plate.Volume - shaved.Volume
+    if abs(removed - expected_removed) > 0.01 * expected_removed:
+        raise SystemExit(
+            f"error: shaving the sides removed {removed:.2f} mm3, expected "
+            f"{expected_removed:.2f} mm3; a cutout must reach a side edge"
+        )
+    return shaved
+
+
 def mirror_for_right_half(plate, lead_centers):
     """Mirror the plate across the YZ plane through its center: the
     right half's plate, since the board is reversible and that half
@@ -650,6 +706,7 @@ def main():
         App.Vector(lead.x + arguments.pattern_shift, lead.y, lead.z)
         for lead in lead_centers
     ]
+    plate = shave_sides(plate, arguments.side_shave)
     if arguments.right:
         plate, lead_centers = mirror_for_right_half(plate, lead_centers)
     plate = turn_upside_down(plate, lead_centers)
@@ -685,6 +742,8 @@ def main():
               f"supported{note}")
     print(f"shift:      hole pattern moved {arguments.pattern_shift:+.2f} mm along x "
           f"relative to the outline, which stays put")
+    print(f"sides:      {arguments.side_shave:.2f} mm shaved off the west and east "
+          f"edges, plate {plate.BoundBox.XLength:.2f} mm wide")
     print(f"half:       {'right, mirrored across the board center line' if arguments.right else 'left'}")
     print(f"print:      written upside down, top face on z = 0 and the lead "
           f"recesses opening upward, {plate.BoundBox.ZLength:.2f} mm tall")
