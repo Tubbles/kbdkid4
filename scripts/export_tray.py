@@ -37,7 +37,8 @@ that half's switches and hotswap sockets sit; afterwards the tray is
 turned through 180 degrees about the X axis so it prints opening-up
 like the left one. That is not a mirror of the left tray: the sockets
 that reach the ledge on the left half do not on the right, so the
-right tray has no ledge notches.
+right tray has no ledge notches, and its ledge reliefs follow that
+half's sockets.
 
 Every corner, convex or concave, bends with the same pair of
 concentric radii: the corner radius on the outside of the bend and
@@ -83,6 +84,14 @@ through its full width, LEDGE_NOTCH_WIDTH_MM along the wall and
 LEDGE_NOTCH_DEPTH_MM down from the ledge top. Which sockets qualify
 follows from the switch placements in the board sources, so the
 notches track the layout.
+
+Beyond that, the ledge is relieved wherever an underside body (the
+nice!nano and the sockets, as rectangles measured on the populated
+STEP export) comes within LEDGE_RELIEF_CLEARANCE_MM of
+its inner face along a straight wall segment: through its full
+width over the body's extent plus the clearance, down to the body's
+reach plus a margin, leaving the wall and the rest of the ledge. The
+first printed left half bound on the nano, 0.03 mm from the ledge.
 
 The design values live in the constants right below this docstring;
 everything else derives from them.
@@ -177,6 +186,36 @@ LEDGE_NOTCH_WIDTH_MM = 3.0
 LEDGE_NOTCH_DEPTH_MM = 3.0
 LEDGE_NOTCH_CLEARANCE_MM = 0.5
 
+# Other underside bodies come closer to the ledge than a print's
+# swelling allows, so the ledge is relieved for them: wherever a body
+# comes within LEDGE_RELIEF_CLEARANCE_MM of the ledge's inner face
+# along a straight wall segment, the ledge is cut through its full
+# width over the body's extent along that segment plus the clearance
+# at both ends, from the ledge top down to the body's reach below the
+# board plus LEDGE_RELIEF_MARGIN_BELOW_MM. The wall stays. Bodies are
+# rectangles in footprint coordinates, (x range, y range, reach below
+# the board), measured on the populated STEP export like the tab tip:
+# the nice!nano's PCB and its USB-C receptacle (which reaches past the
+# PCB's end and deeper), and the hotswap socket as its two offset
+# lobes and its two 1.7 mm end tabs. Inside the west column's notches
+# a tab's relief finds nothing left to cut; at the step corners of the
+# south edge, where the notch logic passes (the tab tip is nearest a
+# corner, not a straight stretch), it is what clears the tab. The
+# first printed left half bound on the nano's north edge, 0.03 mm from
+# the ledge.
+MCU_BODY_RECTANGLES_MM = (
+    ("PCB", (-8.90, 8.90), (-15.45, 17.75), 4.15),
+    ("USB-C receptacle", (-5.85, 5.85), (11.51, 18.71), 4.93),
+)
+HOTSWAP_SOCKET_RECTANGLES_MM = (
+    ((-8.22, -3.57), (-2.25, 2.25), 2.02),  # lobe
+    ((-6.02, -1.37), (2.25, 7.60), 2.02),  # lobe
+    ((-4.54, -2.86), (7.60, 9.28), 2.02),  # tab, tip at HOTSWAP_SOCKET_TAB_TIP_MM
+    ((-6.74, -5.06), (-3.87, -2.25), 2.02),  # tab at the other end
+)
+LEDGE_RELIEF_CLEARANCE_MM = 0.5
+LEDGE_RELIEF_MARGIN_BELOW_MM = 0.5
+
 # Implementation tuning, rarely worth touching.
 CORNER_FIT_SAFETY = 0.95  # margin on the largest corner radius that fits
 MINIMUM_FILLET_RADIUS_MM = 0.01  # below this a fillet is skipped as moot
@@ -191,7 +230,7 @@ usage: freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl>
            [standoff_height={DEFAULT_STANDOFF_HEIGHT_MM}] \
 [standoff_diameter={DEFAULT_STANDOFF_DIAMETER_MM}] \
 [standoff_hole_diameter={DEFAULT_STANDOFF_HOLE_DIAMETER_MM}] \
-[ledge_width={DEFAULT_LEDGE_WIDTH_MM}]
+[ledge_width={DEFAULT_LEDGE_WIDTH_MM}] [relief_clearance={LEDGE_RELIEF_CLEARANCE_MM}]
 
   gap     clearance between PCB edge and cavity wall, mm
   wall    tray wall thickness, mm
@@ -204,7 +243,9 @@ usage: freecadcmd scripts/export_tray.py --pass <pcb.step> <tray.stl>
   standoff_diameter       insert standoff outer diameter, mm
   standoff_hole_diameter  bore for the heat-set insert, mm
   ledge_width             PCB support ledge width from the cavity wall, mm;
-                          the ledge is standoff_height tall, 0 disables it\
+                          the ledge is standoff_height tall, 0 disables it
+  relief_clearance        an underside body closer than this to the ledge
+                          gets the ledge cut away beside it, mm\
 """
 
 
@@ -220,6 +261,7 @@ class Arguments:
         self.standoff_diameter = DEFAULT_STANDOFF_DIAMETER_MM
         self.standoff_hole_diameter = DEFAULT_STANDOFF_HOLE_DIAMETER_MM
         self.ledge_width = DEFAULT_LEDGE_WIDTH_MM
+        self.relief_clearance = LEDGE_RELIEF_CLEARANCE_MM
         self.flip = False
         self.right = False
 
@@ -235,6 +277,7 @@ def parse_arguments(argument_list):
         "standoff_diameter",
         "standoff_hole_diameter",
         "ledge_width",
+        "relief_clearance",
     )
     positionals = []
     for argument in argument_list:
@@ -639,17 +682,94 @@ def turn_for_printing(tray, up, floor, depth):
 
 def wall_outward(outline_wire, center_on_edge, direction, up):
     """The horizontal direction pointing out of the board at a point on
-    the outline, perpendicular to the wall direction there."""
+    the outline, perpendicular to the wall direction there: the side of
+    the segment on which a point just off the outline lies outside the
+    board (the bounding box center would mislead on the short risers of
+    a stepped edge)."""
     outward = direction.cross(up)
-    outline_box = outline_wire.BoundBox
-    outline_center = App.Vector(
-        (outline_box.XMin + outline_box.XMax) / 2.0,
-        (outline_box.YMin + outline_box.YMax) / 2.0,
-        center_on_edge.z,
-    )
-    if outward.dot(center_on_edge.sub(outline_center)) < 0:
+    probe = center_on_edge.add(outward * 0.05)
+    if Part.Face(outline_wire).isInside(probe, 1e-6, True):
         outward = outward.negative()
     return outward
+
+
+def relieve_ledge(
+    tray, cavity_prism, segments, outline_wire, up, corners, reach, label,
+    ledge_top, gap, wall, ledge_width, clearance, margin,
+):
+    """Cut the ledge away wherever a body comes within `clearance` of
+    its inner face: for every straight wall segment the body lies
+    alongside, through the ledge's full width over the body's extent
+    along the segment plus the clearance at both ends, from the ledge
+    top down to `reach` plus `margin` below the board. The cutter is
+    clipped to the cavity, so it may run past the segment's end around
+    a corner (the straight segments stop where the corner arcs begin,
+    and a body beside a corner needs the corner's ledge gone too) and
+    never touches a wall; a stub shorter than 1 mm left at a segment
+    end goes too. `corners` are the body's footprint corners in board
+    coordinates. Returns (tray, reliefs), one (center, length, depth,
+    removed volume) per segment that was cut."""
+    ledge_reach = ledge_width - gap
+    depth = reach + margin
+    reliefs = []
+    for start, vector in segments:
+        length = vector.Length
+        direction = App.Vector(vector).normalize()
+        outward = wall_outward(
+            outline_wire, start.add(direction * (length / 2.0)), direction, up
+        )
+        across = [outward.dot(corner.sub(start)) for corner in corners]
+        along = [direction.dot(corner.sub(start)) for corner in corners]
+        if max(across) < -(ledge_reach + clearance):
+            continue  # clear of this segment's ledge
+        if min(across) > gap:
+            continue  # wholly outside this segment's wall: not alongside it
+        low = min(along) - clearance
+        high = max(along) + clearance
+        if high < 0.0 or low > length:
+            continue  # not alongside this segment
+        if low < 1.0:
+            low = -(ledge_width + gap)  # take the corner block too
+        if length - high < 1.0:
+            high = length + ledge_width + gap
+        base = start.add(direction * low).add(up * (ledge_top - depth))
+        inner = -(ledge_reach + 0.5)  # start inside the cavity, past the ledge
+        outer = gap  # the wall's inner face
+        polygon = [
+            base.add(outward * inner),
+            base.add(direction * (high - low)).add(outward * inner),
+            base.add(direction * (high - low)).add(outward * outer),
+            base.add(outward * outer),
+        ]
+        cutter = Part.Face(Part.makePolygon(polygon + [polygon[0]])).extrude(
+            up * (depth + CAVITY_CUT_EXTRA_MM)
+        ).common(cavity_prism)
+        removable = tray.common(cutter).Volume if cutter.Solids else 0.0
+        if removable < 1e-3:
+            continue  # a window or notch already opened this stretch
+        volume_before = tray.Volume
+        result = tray.cut(cutter)
+        if not result.isValid() or len(result.Solids) != 1:
+            raise SystemExit(f"error: the {label} ledge relief broke the solid")
+        removed = volume_before - result.Volume
+        if abs(removed - removable) > 0.02 * removable + 1e-3:
+            raise SystemExit(
+                f"error: the {label} ledge relief removed {removed:.2f} mm3, "
+                f"expected {removable:.2f} mm3; geometry is off"
+            )
+        center = start.add(direction * ((low + high) / 2.0))
+        # The cutter ends at the wall's inner face; make sure no wall that
+        # was there is gone (a window may already have opened the wall).
+        for along in (low + 0.2, (low + high) / 2.0, high - 0.2):
+            wall_probe = start.add(direction * along).add(
+                outward * (gap + wall / 2.0)
+            ).add(up * (ledge_top - depth / 2.0))
+            was_wall = tray.isInside(wall_probe, 1e-6, True)
+            if was_wall and not result.Solids[0].isInside(wall_probe, 1e-6, True):
+                raise SystemExit(f"error: the {label} ledge relief cut into the wall")
+        tray = result
+        reliefs.append((center, high - low, depth, removed))
+    return tray, reliefs
 
 
 def build_tray(outline_wire, up, gap, wall, floor, depth, ledge_width, ledge_height):
@@ -730,7 +850,7 @@ def build_tray(outline_wire, up, gap, wall, floor, depth, ledge_width, ledge_hei
                 f"{nominal_volume:.1f} mm3; geometry is off"
             )
 
-    return tray, corner_radius
+    return tray, corner_radius, cavity_prism
 
 
 def validate_tray(tray, shell, cavity_prism, depth):
@@ -772,7 +892,7 @@ def main():
         outline_face_pair, open_toward_positive_axis
     )
 
-    tray, corner_radius = build_tray(
+    tray, corner_radius, cavity_prism = build_tray(
         resting_face.OuterWire,
         up,
         arguments.gap,
@@ -852,6 +972,7 @@ def main():
         "usb",
     )
     ledge_notches = []
+    ledge_reliefs = []
     if arguments.ledge_width > arguments.gap:
         ledge_reach = arguments.ledge_width - arguments.gap
         switches = component_placements(KEY_SWITCH_NAME_PATTERN)
@@ -882,6 +1003,27 @@ def main():
                 f"{name} socket",
             )
             ledge_notches.append((name, closest, past_edge))
+        bodies = [
+            (f"{MCU_NAME} {part}", mcu_by_name[MCU_NAME], x_range, y_range, reach)
+            for part, x_range, y_range, reach in MCU_BODY_RECTANGLES_MM
+        ]
+        for name in sorted(switches):
+            if switches[name].flipped == open_toward_positive_axis:
+                continue  # its socket faces the opening, not the cavity
+            for x_range, y_range, reach in HOTSWAP_SOCKET_RECTANGLES_MM:
+                bodies.append((f"{name} socket", switches[name], x_range, y_range, reach))
+        for label, placement, x_range, y_range, reach in bodies:
+            corners = [
+                placement.map_point(App.Vector(x, y, 0.0))
+                for x in x_range for y in y_range
+            ]
+            tray, reliefs = relieve_ledge(
+                tray, cavity_prism, segments, resting_face.OuterWire, up, corners,
+                reach, label, board_underside, arguments.gap, arguments.wall,
+                arguments.ledge_width, arguments.relief_clearance,
+                LEDGE_RELIEF_MARGIN_BELOW_MM,
+            )
+            ledge_reliefs.extend((label,) + relief for relief in reliefs)
     if arguments.right:
         tray = turn_for_printing(tray, up, arguments.floor, arguments.depth)
     mesh = export_stl(tray, arguments.stl_file)
@@ -925,6 +1067,12 @@ def main():
               f"{name}'s socket at ({closest.x:.2f}, {closest.y:.2f}); the socket "
               f"tab ends {past_edge:+.2f} mm past the board edge, "
               f"{arguments.gap - past_edge:.2f} mm from the wall")
+    if arguments.ledge_width > arguments.gap and not ledge_reliefs:
+        print(f"ledge relief: none, every underside body clears the ledge by "
+              f"{arguments.relief_clearance} mm")
+    for label, center, length, depth, removed in ledge_reliefs:
+        print(f"ledge relief: {length:.1f} mm along the wall, {depth:.2f} mm deep, "
+              f"for {label} at ({center.x:.2f}, {center.y:.2f}), {removed:.1f} mm3")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 

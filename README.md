@@ -20,7 +20,7 @@ The parameters (gap, wall, floor, depth, standoff and ledge dimensions) and thei
 
 CI runs this against the freshly generated STEP and uploads the result as the `tray-stl` workflow artifact.
 
-CI exports both halves as the `tray-stl` artifact: `_Tray_Left.stl` as described, and `_Tray_Right.stl` built with the board's other side up (the word `right`), where the right half's switches and hotswap sockets sit, then turned over so it prints opening-up. That is not a mirror of the left tray: the right half's sockets do not reach the board edge, so that tray has no ledge notches.
+CI exports both halves as the `tray-stl` artifact: `_Tray_Left.stl` as described, and `_Tray_Right.stl` built with the board's other side up (the word `right`), where the right half's switches and hotswap sockets sit, then turned over so it prints opening-up. That is not a mirror of the left tray: the right half's sockets do not reach the board edge, so that tray has no ledge notches, and the ledge reliefs (the ledge cut away beside the nice!nano and beside any hotswap socket body that comes within `relief_clearance` of it, so a populated board seats despite print swelling) follow that half's parts.
 
 ## 3D printed PCB replica
 
