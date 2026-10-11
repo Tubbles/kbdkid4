@@ -3,6 +3,10 @@
     {
       "dir": "main",
       "ref": "main"
+    },
+    {
+      "dir": "widen-cones",
+      "ref": "widen-cones"
     }
   ],
   "removed": [],
