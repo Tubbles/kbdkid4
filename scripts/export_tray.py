@@ -71,18 +71,18 @@ its USB connector (MCU_NAME) are mounted on the board's underside, the
 switch lever reaching through the wall and the connector opening onto
 it, so the wall gets a window cut through it below the board over the
 outline segment nearest each of them: one sized for the switch lever's
-travel, one for a USB-C plug. On the right half the plug's window is
-still the original rectangle sized for a plug's overmold. On the
-soldered left half the connector was measured, so its window is
-smaller and hugs the connector, with rounded corners and both faces of
-the wall chamfered around it. The ledge behind the wall is cut away
-over the same stretch. The switch and the microcontroller are located
-via the board sources, since the STEP carries no component bodies. The
-switch's reach below the board comes from its package 3D model, the
-nano's from measurements (see the constants). The switch body is wider
-than its window and comes close to the wall, so around that window the
-wall's inner face gets a pocket over the body's width, leaving a thin
-outer skin. The nano behind the USB window gets ledge reliefs (below).
+travel, one for a USB-C plug. The plug's window hugs the connector,
+with rounded corners and both faces of the wall chamfered around it:
+measured on the soldered left half, and lowered on the right half by
+how much taller its nano's sockets are. The ledge behind the wall is
+cut away over the same stretch. The switch and the microcontroller are
+located via the board sources, since the STEP carries no component
+bodies. The switch's reach below the board comes from its package 3D
+model, the nano's from measurements (see the constants). The switch
+body is wider than its window and comes close to the wall, so around
+that window the wall's inner face gets a pocket over the body's width,
+leaving a thin outer skin. The nano behind the USB window gets ledge
+reliefs (below).
 
 The hotswap sockets hang under the board too, and in the switch
 column along the west edge each socket ends in a narrow tab that
@@ -190,43 +190,36 @@ MCU_USB_END_OFFSET_MM = 18.7
 LEFT_NANO_SOCKET_HEIGHT_MM = 2.56
 RIGHT_NANO_SOCKET_HEIGHT_MM = 4.30
 NANO_PCB_THICKNESS_MM = 1.6
-# The right half's window is still the original one, centered where
-# the package model puts the receptacle (3.35 mm below the board) and
-# sized for a USB-C plug's overmold (12.35 x 6.5 mm at most per the
-# USB Type-C specification), not just its shell, so a plug seats even
-# if the receptacle's mouth sits behind the wall. That half is
-# measured once soldered. With the measured chain its shell will span
-# 2.74 to 5.90 mm below the board (center 4.32 mm), which this window
-# still contains, but a full size overmold centered on it would end
-# 0.22 mm below the window, and the mouth sits behind the wall (0.56 mm
-# on the left half).
-RIGHT_USB_WINDOW_CENTER_BELOW_BOARD_MM = 3.35
-USB_WINDOW_WIDTH_MM = 14.0
-USB_WINDOW_HEIGHT_MM = 8.0
 
 # On the soldered left half the receptacle's mouth sits only 0.56 mm
-# behind the wall's outer face, so the wall hugs the connector with a
-# window of its own, measured on that half as the earlier 14 x 8 mm
-# window with its top edge pulled in 1.0 mm, its bottom edge 2.5 mm,
-# its end nearer the power switch 2.0 mm and its other end 1.5 mm.
-# Along the wall its center sits away from the power switch by the
-# given offset, from the outline point nearest the connector end that
-# the right half's window is centered on. Its corners are rounded like
-# the connector's and both faces of the wall are chamfered around it.
-LEFT_USB_WINDOW_WIDTH_MM = 10.5
-LEFT_USB_WINDOW_HEIGHT_MM = 4.5
+# behind the wall's outer face, so the wall hugs the connector. The
+# window was measured on that half as the earlier one (14 x 8 mm, sized
+# for a plug's overmold, centered 3.35 mm below the board where the
+# package model puts the receptacle, along the wall at the outline
+# point nearest the connector end) with its top edge pulled in 1.0 mm,
+# its bottom edge 2.5 mm, its end nearer the power switch 2.0 mm and
+# its other end 1.5 mm. Its corners are rounded like the connector's
+# and both faces of the wall are chamfered around it. The right half
+# gets the same window, lowered by how much taller its nano's sockets
+# are (1.74 mm), since its nano is the same part mounted the same way.
+# Its shift away from the switch stays in board coordinates, which
+# assumes the shift's unknown cause follows the board. If it follows
+# the nano instead, it belongs on the other side there (the shell then
+# still clears the window by 0.28 mm).
+USB_WINDOW_WIDTH_MM = 10.5
+USB_WINDOW_HEIGHT_MM = 4.5
 LEFT_USB_WINDOW_CENTER_BELOW_BOARD_MM = 2.60
-LEFT_USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM = 0.25
+USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM = 0.25
 # The nano's package model has the receptacle shell ("usb4520-03-0-a
 # v1") 8.94 x 3.16 mm at its mouth with a 1.28 mm outer corner radius.
 # The measured chain above puts the left shell 1.00 to 4.16 mm below
-# the board, its center 2.58 mm below, 0.02 mm from the window's
-# center, so the window clears it by about 0.67 mm above and below.
-# Across, the pull-ins center it with 0.78 mm to spare on each side. A
-# 1.28 + 0.67 = 1.95 mm radius makes the corners concentric with the
-# shell's vertically.
-LEFT_USB_WINDOW_CORNER_RADIUS_MM = 1.95
-LEFT_USB_WINDOW_CHAMFER_MM = 0.2  # 45 degrees, on the wall's outer and inner faces
+# the board (the right one 2.74 to 5.90 mm), its center 0.02 mm above
+# the window's, so the window clears it by about 0.67 mm above and
+# below. Across, the pull-ins center it with 0.78 mm to spare on each
+# side. A 1.28 + 0.67 = 1.95 mm radius makes the corners concentric
+# with the shell's vertically.
+USB_WINDOW_CORNER_RADIUS_MM = 1.95
+USB_WINDOW_CHAMFER_MM = 0.2  # 45 degrees, on the wall's outer and inner faces
 
 # The key switches' hotswap sockets (Kailh Choc PG1350 with the
 # CPG135001S001 socket) hang 2.0 mm under the board, and each ends in
@@ -855,19 +848,21 @@ def validate_rounded_window(
                     )
 
 
-def left_usb_window_center(usb_window_center, usb_direction, switch_window_center):
-    """The left half's USB window center on the outline: the right
-    half's one moved LEFT_USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM along
+def usb_window_center_away_from_switch(
+    usb_outline_point, usb_direction, switch_window_center
+):
+    """The USB window center on the outline: the outline point nearest
+    the connector end moved USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM along
     the wall, away from the power switch window."""
-    toward_switch = usb_direction.dot(switch_window_center.sub(usb_window_center))
+    toward_switch = usb_direction.dot(switch_window_center.sub(usb_outline_point))
     if abs(toward_switch) < 1.0:
         raise SystemExit(
             "error: the power switch window is not off to either side of the "
             "USB window, cannot tell which way is away from it"
         )
     switch_side = 1.0 if toward_switch > 0 else -1.0
-    return usb_window_center.add(
-        usb_direction * (-switch_side * LEFT_USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM)
+    return usb_outline_point.add(
+        usb_direction * (-switch_side * USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM)
     )
 
 
@@ -1295,58 +1290,38 @@ def main():
     usb_end = mcu_by_name[MCU_NAME].map_point(
         App.Vector(0.0, MCU_USB_END_OFFSET_MM, 0.0)
     )
-    _usb_index, usb_window_center, usb_direction = nearest_outline_segment(
+    _usb_index, usb_outline_point, usb_direction = nearest_outline_segment(
         segments, usb_end
     )
-    usb_window_middle = board_underside - RIGHT_USB_WINDOW_CENTER_BELOW_BOARD_MM
+    usb_window_center = usb_window_center_away_from_switch(
+        usb_outline_point, usb_direction, switch_window_center
+    )
+    nano_socket_height = (
+        RIGHT_NANO_SOCKET_HEIGHT_MM if arguments.right else LEFT_NANO_SOCKET_HEIGHT_MM
+    )
+    usb_window_middle = board_underside - (
+        LEFT_USB_WINDOW_CENTER_BELOW_BOARD_MM
+        + nano_socket_height
+        - LEFT_NANO_SOCKET_HEIGHT_MM
+    )
     usb_window_bottom = usb_window_middle - USB_WINDOW_HEIGHT_MM / 2.0
     usb_window_top = usb_window_middle + USB_WINDOW_HEIGHT_MM / 2.0
-    usb_window_width = USB_WINDOW_WIDTH_MM
-    usb_window_shape = ""
-    if arguments.right:
-        tray = cut_wall_window(
-            tray,
-            resting_face.OuterWire,
-            up,
-            usb_window_center,
-            usb_direction,
-            USB_WINDOW_WIDTH_MM,
-            usb_window_bottom,
-            usb_window_top,
-            arguments.gap,
-            arguments.wall,
-            arguments.ledge_width,
-            "usb",
-        )
-    else:
-        usb_window_center = left_usb_window_center(
-            usb_window_center, usb_direction, switch_window_center
-        )
-        usb_window_width = LEFT_USB_WINDOW_WIDTH_MM
-        usb_window_middle = board_underside - LEFT_USB_WINDOW_CENTER_BELOW_BOARD_MM
-        usb_window_bottom = usb_window_middle - LEFT_USB_WINDOW_HEIGHT_MM / 2.0
-        usb_window_top = usb_window_middle + LEFT_USB_WINDOW_HEIGHT_MM / 2.0
-        tray = cut_rounded_wall_window(
-            tray,
-            resting_face.OuterWire,
-            up,
-            usb_window_center,
-            usb_direction,
-            usb_window_width,
-            usb_window_bottom,
-            usb_window_top,
-            LEFT_USB_WINDOW_CORNER_RADIUS_MM,
-            LEFT_USB_WINDOW_CHAMFER_MM,
-            arguments.gap,
-            arguments.wall,
-            arguments.ledge_width,
-            "usb",
-        )
-        usb_window_shape = (
-            f", corners rounded {LEFT_USB_WINDOW_CORNER_RADIUS_MM} mm, a "
-            f"{LEFT_USB_WINDOW_CHAMFER_MM} mm x 45 degree chamfer on both "
-            "faces of the wall,"
-        )
+    tray = cut_rounded_wall_window(
+        tray,
+        resting_face.OuterWire,
+        up,
+        usb_window_center,
+        usb_direction,
+        USB_WINDOW_WIDTH_MM,
+        usb_window_bottom,
+        usb_window_top,
+        USB_WINDOW_CORNER_RADIUS_MM,
+        USB_WINDOW_CHAMFER_MM,
+        arguments.gap,
+        arguments.wall,
+        arguments.ledge_width,
+        "usb",
+    )
     ledge_notches = []
     ledge_reliefs = []
     if arguments.ledge_width > arguments.gap:
@@ -1379,9 +1354,6 @@ def main():
                 f"{name} socket",
             )
             ledge_notches.append((name, closest, past_edge))
-        nano_socket_height = (
-            RIGHT_NANO_SOCKET_HEIGHT_MM if arguments.right else LEFT_NANO_SOCKET_HEIGHT_MM
-        )
         nano_reach = nano_socket_height + NANO_PCB_THICKNESS_MM
         bodies = [
             (f"{MCU_NAME} {part}", mcu_by_name[MCU_NAME], x_range, y_range, nano_reach)
@@ -1440,8 +1412,10 @@ def main():
           f"face around that window for {POWER_SWITCH_NAME}'s body, "
           f"{POWER_SWITCH_POCKET_SKIN_MM} mm of wall left outside it, "
           f"{switch_pocket_volume:.1f} mm3")
-    print(f"window:     {usb_window_width:.1f} x {usb_window_top - usb_window_bottom:.1f} "
-          f"mm through the wall for the USB-C plug{usb_window_shape} at the wall "
+    print(f"window:     {USB_WINDOW_WIDTH_MM:.1f} x {usb_window_top - usb_window_bottom:.1f} "
+          f"mm through the wall for the USB-C plug, corners rounded "
+          f"{USB_WINDOW_CORNER_RADIUS_MM} mm, a {USB_WINDOW_CHAMFER_MM} mm x 45 "
+          f"degree chamfer on both faces of the wall, at the wall "
           f"segment nearest "
           f"{MCU_NAME}'s connector end ({usb_end.x:.2f}, {usb_end.y:.2f}), "
           f"centered near ({usb_window_center.x:.2f}, {usb_window_center.y:.2f}), "
