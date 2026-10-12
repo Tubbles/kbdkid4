@@ -50,6 +50,12 @@ Last, side_shave (default DEFAULT_SIDE_SHAVE_MM) comes off the
 plate's west and east edges: the printed plate is a snug fit
 across the tray's width.
 
+Right before export the plate's touching solids (the kbdkid3 cells,
+the tab, the corner slab, any cover and the strips the pattern shift
+fills) are fused into one, so slicers get a single closed mesh
+instead of one with coincident internal walls at every solid's
+boundary.
+
 The screws clamp the PCB onto the tray's standoffs and the plate sits
 over their heads, held down by the switches, so head-sized clearance
 holes are cut where the board has its mounting drills, detected in
@@ -74,6 +80,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import FreeCAD as App
+import Mesh
 import Part
 
 from board_step import (
@@ -191,6 +198,12 @@ DEFAULT_SIDE_SHAVE_MM = 0.1
 # affects reporting: every position is cut either way, since whatever
 # sliver protrudes into the screw's path must go.
 SUPPORTED_HOLE_THRESHOLD = 0.5
+
+# The plate's solids only touch, so fusing them into one before export
+# must keep the volume: equal within 1e-13 (relative) on FreeCAD 1.0.
+# This allows for numerical noise and still catches the loss of
+# anything larger than about 0.01 mm3.
+FUSE_VOLUME_TOLERANCE = 1e-6  # relative
 
 USAGE = f"""\
 usage: freecadcmd scripts/export_plate.py --pass <pcb.step> <plate.fcstd>
@@ -1038,6 +1051,51 @@ def drill_holes(plate, hole_centers, hole_diameter):
     return drilled, supports
 
 
+def fuse_into_one_solid(plate):
+    """Fuse the plate's touching solids into one, so the STL is a single
+    closed shell without internal walls. A boolean on the whole compound
+    has silently dropped a cell before (see shift_pattern), hence the
+    checks: the result must be one valid solid with the compound's
+    volume, since the solids only touch and nothing may be lost.
+    Returns the solid."""
+    volume_before = plate.Volume
+    fused = plate.Solids[0].multiFuse(plate.Solids[1:]).removeSplitter()
+    if not fused.isValid() or len(fused.Solids) != 1:
+        raise SystemExit(
+            f"error: fusing the plate gave {len(fused.Solids)} solids "
+            f"(valid: {fused.isValid()}), expected one valid solid"
+        )
+    if abs(fused.Volume - volume_before) > FUSE_VOLUME_TOLERANCE * volume_before:
+        raise SystemExit(
+            f"error: fusing the plate changed its volume from {volume_before:.4f} "
+            f"to {fused.Volume:.4f} mm3; a solid was lost or two overlapped"
+        )
+    return fused.Solids[0]
+
+
+def check_closed_mesh(stl_file):
+    """Fail on an STL that is not one closed, manifold shell free of
+    self-intersections, read back from the file itself since STL
+    stores single precision coordinates. Remove a failing file: it
+    must never be left behind as if it were fine."""
+    mesh = Mesh.Mesh(stl_file)
+    problems = []
+    if not mesh.isSolid():
+        problems.append("not closed")
+    if mesh.hasNonManifolds():
+        problems.append("non-manifold")
+    components = mesh.countComponents()
+    if components != 1:
+        problems.append(f"{components} separate components")
+    if mesh.hasSelfIntersections():
+        problems.append("self-intersecting")
+    if problems:
+        os.remove(stl_file)
+        raise SystemExit(
+            f"error: the plate mesh is {', '.join(problems)}, removed {stl_file}"
+        )
+
+
 def main():
     arguments = parse_arguments(script_arguments(sys.argv))
 
@@ -1102,12 +1160,15 @@ def main():
         recess_centers, reset_probe = mirrored[:-1], mirrored[-1]
     plate = turn_upside_down(plate, recess_centers)
     check_turned_reset_pocket(plate, reset_probe, RESET_POCKET_DEPTH_MM)
+    solid_count = len(plate.Solids)
+    plate = fuse_into_one_solid(plate)
     mesh = export_stl(plate, arguments.stl_file)
+    check_closed_mesh(arguments.stl_file)
 
     print(f"board:      {board_description}, {len(hole_centers)} mounting drills")
     print(f"plate:      '{PLATE_OBJECT_NAME}' from {arguments.fcstd_file}, "
           f"{box.XLength:.2f} x {box.YLength:.2f} x {box.ZLength:.2f} mm, "
-          f"{len(plate.Solids)} solids")
+          f"{solid_count} solids fused into one")
     print(f"aligned:    moved ({alignment.x:+.3f}, {alignment.y:+.3f}) mm onto the "
           f"board's switch grid ({len(switches)} switches), outer edges "
           f"trimmed {PLATE_EDGE_TRIM_MM} mm")
