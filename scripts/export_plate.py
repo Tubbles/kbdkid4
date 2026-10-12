@@ -29,10 +29,9 @@ COVERED_SWITCH_NAME (the bottom row's third key, hard to reach): its
 switch cutout is filled in solid, flush with the plate's top and bottom
 faces, so the board under it is no longer exposed. The key's diode
 stays soldered there, so the cover gets a rectangular pit on its
-underside, rotated with the diode and stopping PLATE_SKIN_MM short of
-the top face like the lead recesses. On the right half the mirror puts
-the cover over that half's own key and diode, which the script checks
-against the board sources.
+underside, rotated with the diode and DIODE_PIT_DEPTH_MM deep. On the
+right half the mirror puts the cover over that half's own key and
+diode, which the script checks against the board sources.
 
 The STL is written upside down, top face on z = 0 and the recesses
 opening upward, so it prints as is without supports.
@@ -165,12 +164,15 @@ RESET_POCKET_DEPTH_MM = 1.0
 # The covered variant (the word "covered"): one bottom row key is hard
 # to reach and left out, so its switch cutout is filled in solid. Its
 # diode stays soldered under the cover, which gets a rectangular pit on
-# its underside, rotated with the diode and leaving PLATE_SKIN_MM of
-# the top face. The diode is a SOD-123 (package SOD3717X135) on its
+# its underside, rotated with the diode. The diode is a SOD-123 (package
+# SOD3717X135, measured 1.14 mm tall on the board 2026-10-12) on its
 # "Hand Soldering" footprint: the pads' copper spans DIODE_PAD_SPAN_MM
 # along the body axis, the body is DIODE_BODY_WIDTH_MM wide across it.
 # The pit clears both by DIODE_PIT_MARGIN_MM per side (solder fillets,
-# print swelling). The right half is the same board turned over and its
+# print swelling). It is DIODE_PIT_DEPTH_MM deep, leaving three 0.2 mm
+# print layers of the 2.2 mm plate over it: a single layer
+# (PLATE_SKIN_MM, as over the lead recesses) printed translucent over a
+# pit this wide. The right half is the same board turned over and its
 # plate is the left one mirrored, so a flipped key switch and a flipped
 # diode must sit at exactly the covered ones' positions there.
 COVERED_SWITCH_NAME = "S123"  # third key from the left in the bottom row
@@ -179,6 +181,7 @@ DIODE_NAME_PATTERN = re.compile(r"D[0-9]{3}")  # this project's key diodes
 DIODE_PAD_SPAN_MM = 5.25
 DIODE_BODY_WIDTH_MM = 1.56
 DIODE_PIT_MARGIN_MM = 0.5
+DIODE_PIT_DEPTH_MM = 1.6
 COUNTERPART_POSITION_TOLERANCE_MM = 0.01
 
 # Shift of the whole hole pattern along +X relative to the outline, in
@@ -823,12 +826,12 @@ def cover_switch_cell(plate, position):
 
 def cut_diode_pit(plate, diode):
     """Cut a rectangular pit into the plate's underside for the diode
-    under the cover, rotated with the diode, leaving PLATE_SKIN_MM of
-    the top face. Returns (plate, length, width, depth)."""
+    under the cover, rotated with the diode, DIODE_PIT_DEPTH_MM deep.
+    Returns (plate, length, width, depth)."""
     box = plate.BoundBox
     length = DIODE_PAD_SPAN_MM + 2.0 * DIODE_PIT_MARGIN_MM
     width = DIODE_BODY_WIDTH_MM + 2.0 * DIODE_PIT_MARGIN_MM
-    depth = box.ZLength - PLATE_SKIN_MM
+    depth = DIODE_PIT_DEPTH_MM
     extra = 1.0  # the pit continues below the underside for a clean cut
     pit = Part.makeBox(
         length,
@@ -1204,7 +1207,8 @@ def main():
               f"{switch.y:.2f}) filled solid, {pit_length:.2f} x {pit_width:.2f} mm "
               f"pit {pit_depth:.2f} mm deep in the underside for "
               f"{COVERED_DIODE_NAME} at ({diode.x:.2f}, {diode.y:.2f}), rotated "
-              f"{covered_diode.rotation_degrees:.0f} degrees{right_note}")
+              f"{covered_diode.rotation_degrees:.0f} degrees, "
+              f"{box.ZLength - pit_depth:.2f} mm of plate left above it{right_note}")
     for center, support in zip(hole_centers, supports):
         note = ""
         if support < SUPPORTED_HOLE_THRESHOLD:
