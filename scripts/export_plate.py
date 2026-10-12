@@ -22,17 +22,27 @@ extension's underside gets a conical recess at every lead drill found
 in the STEP, stopping PLATE_SKIN_MM short of the top face so nothing
 shows through. The reset pushbutton gets a plain hole.
 
+The word "covered" makes the variant for a half without the key at
+COVERED_SWITCH_NAME (the bottom row's third key, hard to reach): its
+switch cutout is filled in solid, flush with the plate's top and bottom
+faces, so the board under it is no longer exposed. The key's diode
+stays soldered there, so the cover gets a rectangular pit on its
+underside, rotated with the diode and stopping PLATE_SKIN_MM short of
+the top face like the lead recesses. On the right half the mirror puts
+the cover over that half's own key and diode, which the script checks
+against the board sources.
+
 The STL is written upside down, top face on z = 0 and the recesses
 opening upward, so it prints as is without supports.
 
 Finally the whole pattern of switch cutouts, screw holes, lead
-recesses and the reset hole is shifted along +X by pattern_shift
-(default DEFAULT_PATTERN_SHIFT_MM) while the outline stays exactly
-where it is: the first printed plates sat right in the tray but their
-holes drifted off the board's features toward the nice!nano side, and
-a plate printed with a 0.5 mm shift came out offset about as far the
-other way, so 0.25 mm is the current try. The cause of the drift is
-still open (SUGGESTIONS.md).
+recesses, the reset hole and any diode pit is shifted along +X by
+pattern_shift (default DEFAULT_PATTERN_SHIFT_MM) while the outline
+stays exactly where it is: the first printed plates sat right in the
+tray but their holes drifted off the board's features toward the
+nice!nano side, and a plate printed with a 0.5 mm shift came out
+offset about as far the other way, so 0.25 mm is the current try. The
+cause of the drift is still open (SUGGESTIONS.md).
 
 Last, side_shave (default DEFAULT_SIDE_SHAVE_MM) comes off the
 plate's west and east edges: the printed plate is a snug fit
@@ -65,6 +75,7 @@ import FreeCAD as App
 import Part
 
 from board_step import (
+    component_placements,
     component_positions,
     drill_centers,
     export_stl,
@@ -125,6 +136,25 @@ PLATE_SKIN_MM = 0.2
 RESET_SWITCH_NAME = "S3"
 RESET_SWITCH_HOLE_DIAMETER_MM = 10.0
 
+# The covered variant (the word "covered"): one bottom row key is hard
+# to reach and left out, so its switch cutout is filled in solid. Its
+# diode stays soldered under the cover, which gets a rectangular pit on
+# its underside, rotated with the diode and leaving PLATE_SKIN_MM of
+# the top face. The diode is a SOD-123 (package SOD3717X135) on its
+# "Hand Soldering" footprint: the pads' copper spans DIODE_PAD_SPAN_MM
+# along the body axis, the body is DIODE_BODY_WIDTH_MM wide across it.
+# The pit clears both by DIODE_PIT_MARGIN_MM per side (solder fillets,
+# print swelling). The right half is the same board turned over and its
+# plate is the left one mirrored, so a flipped key switch and a flipped
+# diode must sit at exactly the covered ones' positions there.
+COVERED_SWITCH_NAME = "S123"  # third key from the left in the bottom row
+COVERED_DIODE_NAME = "D123"
+DIODE_NAME_PATTERN = re.compile(r"D[0-9]{3}")  # this project's key diodes
+DIODE_PAD_SPAN_MM = 5.25
+DIODE_BODY_WIDTH_MM = 1.56
+DIODE_PIT_MARGIN_MM = 0.5
+COUNTERPART_POSITION_TOLERANCE_MM = 0.01
+
 # Shift of the whole hole pattern along +X relative to the outline, in
 # mm, applied last (before the turn and the mirror). On the right half
 # it mirrors along with everything else, toward that half's nano side.
@@ -145,12 +175,16 @@ SUPPORTED_HOLE_THRESHOLD = 0.5
 
 USAGE = f"""\
 usage: freecadcmd scripts/export_plate.py --pass <pcb.step> <plate.fcstd>
-           <plate.stl> [right] [hole_diameter={PLATE_HOLE_DIAMETER_MM}]
+           <plate.stl> [right] [covered]
+           [hole_diameter={PLATE_HOLE_DIAMETER_MM}]
            [pattern_shift={DEFAULT_PATTERN_SHIFT_MM}]
            [side_shave={DEFAULT_SIDE_SHAVE_MM}]
 
   right          export the right half: the plate mirrored across the
                  board's center line
+  covered        fill the switch cutout of {COVERED_SWITCH_NAME} solid, with a pit in
+                 its underside for {COVERED_DIODE_NAME}, for a plate without that key
+                 (on the right half these are S243 and D243)
   pattern_shift  move every cutout, hole and recess this far along +X
                  (toward the nice!nano side on the left half) while the
                  outline stays put, mm
@@ -170,6 +204,7 @@ class Arguments:
         self.pattern_shift = DEFAULT_PATTERN_SHIFT_MM
         self.side_shave = DEFAULT_SIDE_SHAVE_MM
         self.right = False
+        self.covered = False
 
 
 def parse_arguments(argument_list):
@@ -178,6 +213,8 @@ def parse_arguments(argument_list):
     for argument in argument_list:
         if argument == "right":
             arguments.right = True
+        elif argument == "covered":
+            arguments.covered = True
         elif "=" in argument:
             key, _, value = argument.partition("=")
             if key not in ("hole_diameter", "pattern_shift", "side_shave"):
@@ -499,16 +536,207 @@ def cut_reset_hole(plate):
     return cut, center
 
 
-def turn_upside_down(plate, lead_centers):
+def placement_by_name(name):
+    """The board placement of the component called `name`, from the
+    board sources."""
+    placements = component_placements(re.compile(re.escape(name)))
+    if name not in placements:
+        raise SystemExit(f"error: '{name}' not found in the board sources")
+    return placements[name]
+
+
+def flipped_counterpart(name_pattern, placement, kind):
+    """The one flipped part matching `name_pattern` at exactly
+    `placement`'s position, as (name, placement)."""
+    matches = sorted(
+        (
+            (name, other)
+            for name, other in component_placements(name_pattern).items()
+            if other.flipped
+            and other.position.sub(placement.position).Length
+            < COUNTERPART_POSITION_TOLERANCE_MM
+        ),
+        key=lambda match: match[0],
+    )
+    if len(matches) != 1:
+        raise SystemExit(
+            f"error: expected one flipped {kind} for the right half at "
+            f"({placement.position.x:.3f}, {placement.position.y:.3f}), "
+            f"found {len(matches)}; the mirrored cover would not fit"
+        )
+    return matches[0]
+
+
+def footprint_x_axis(placement):
+    """The footprint's x axis (a diode's body axis) in board
+    coordinates, as a unit vector."""
+    return placement.map_point(App.Vector(1, 0, 0)).sub(
+        placement.map_point(App.Vector(0, 0, 0))
+    )
+
+
+def right_half_counterparts(switch, diode):
+    """Names of the right half's key switch and diode under the cover:
+    the flipped parts at exactly the covered switch's and diode's
+    positions, the diode lying along the same board axis. The right
+    plate is the left one mirrored, so without them the cover and the
+    pit would not fit that half. The pit is symmetric, so the diode may
+    point either way along that axis."""
+    switch_name, _switch_counterpart = flipped_counterpart(
+        SWITCH_NAME_PATTERN, switch, "key switch"
+    )
+    diode_name, diode_counterpart = flipped_counterpart(
+        DIODE_NAME_PATTERN, diode, "diode"
+    )
+    sine = footprint_x_axis(diode).cross(footprint_x_axis(diode_counterpart)).z
+    if abs(sine) > 1e-6:
+        raise SystemExit(
+            f"error: the right half's {diode_name} does not lie along the same "
+            f"board axis as {COVERED_DIODE_NAME} (rotation "
+            f"{diode_counterpart.rotation_degrees:.1f} against "
+            f"{diode.rotation_degrees:.1f} degrees); the mirrored pit would not fit"
+        )
+    return [switch_name, diode_name]
+
+
+def solid_bottom_outline(solid):
+    """The outer wire of a solid's bottom face."""
+    bottom = solid.BoundBox.ZMin
+    bottom_faces = [
+        face
+        for face in solid.Faces
+        if isinstance(face.Surface, Part.Plane)
+        and abs(face.BoundBox.ZMin - bottom) < 0.001
+        and abs(face.BoundBox.ZMax - bottom) < 0.001
+    ]
+    if len(bottom_faces) != 1:
+        raise SystemExit(
+            f"error: expected one bottom face on the covered cell, found "
+            f"{len(bottom_faces)}"
+        )
+    return bottom_faces[0].OuterWire
+
+
+def cutout_bounding_volume(cell):
+    """An upper bound for the volume of a cell's cutout: the bounding
+    box around every inner wire of the cell's horizontal faces (the
+    cutout's openings and the steps inside it), times the cell's
+    thickness."""
+    inner_wires = [
+        wire
+        for face in cell.Faces
+        if isinstance(face.Surface, Part.Plane) and abs(face.Surface.Axis.z) > 0.999
+        for wire in face.Wires
+        if not wire.isSame(face.OuterWire)
+    ]
+    if not inner_wires:
+        raise SystemExit("error: the covered cell has no cutout openings")
+    box = inner_wires[0].BoundBox
+    for wire in inner_wires[1:]:
+        box.add(wire.BoundBox)
+    return box.XLength * box.YLength * cell.BoundBox.ZLength
+
+
+def cover_switch_cell(plate, position):
+    """Fill the switch cutout at `position` solid: the cell holding it
+    (the one solid whose bounding box contains it) is replaced by a
+    full-thickness prism of its outer boundary, so its outline and its
+    contact with the neighbouring cells stay as they are and the other
+    solids are left alone. Returns the plate."""
+    indices = [
+        index
+        for index, solid in enumerate(plate.Solids)
+        if solid.BoundBox.XMin < position.x < solid.BoundBox.XMax
+        and solid.BoundBox.YMin < position.y < solid.BoundBox.YMax
+    ]
+    if len(indices) != 1:
+        raise SystemExit(
+            f"error: expected one plate cell at ({position.x:.2f}, "
+            f"{position.y:.2f}) to cover, found {len(indices)}"
+        )
+    cell = plate.Solids[indices[0]]
+    box = plate.BoundBox
+    middle = App.Vector(position.x, position.y, box.Center.z)
+    if cell.isInside(middle, 1e-6, True):
+        raise SystemExit(
+            f"error: the cell at ({position.x:.2f}, {position.y:.2f}) has no "
+            "switch cutout to cover"
+        )
+    outline = solid_bottom_outline(cell)
+    cover = Part.Face(outline).extrude(App.Vector(0, 0, box.ZLength))
+    if cell.cut(cover).Volume > 0.001:
+        raise SystemExit("error: the cover does not enclose the cell it replaces")
+    cover_box = cover.BoundBox
+    if abs(cover_box.ZMin - box.ZMin) > 0.001 or abs(cover_box.ZMax - box.ZMax) > 0.001:
+        raise SystemExit(
+            f"error: the cover spans z {cover_box.ZMin:.3f} to "
+            f"{cover_box.ZMax:.3f}, not the plate's {box.ZMin:.3f} to "
+            f"{box.ZMax:.3f}"
+        )
+    filled_volume = cover.Volume - cell.Volume
+    cutout_bound = cutout_bounding_volume(cell)
+    if not 0 < filled_volume < cutout_bound:
+        raise SystemExit(
+            f"error: covering the cell filled {filled_volume:.2f} mm3, expected "
+            f"more than 0 and less than the {cutout_bound:.2f} mm3 box around "
+            "the cutout"
+        )
+    solids = list(plate.Solids)
+    solids[indices[0]] = cover
+    covered = Part.makeCompound(solids)
+    if not inside_any(covered, middle):
+        raise SystemExit(
+            f"error: the cutout at ({position.x:.2f}, {position.y:.2f}) is "
+            "still open after covering"
+        )
+    return covered
+
+
+def cut_diode_pit(plate, diode):
+    """Cut a rectangular pit into the plate's underside for the diode
+    under the cover, rotated with the diode, leaving PLATE_SKIN_MM of
+    the top face. Returns (plate, length, width, depth)."""
+    box = plate.BoundBox
+    length = DIODE_PAD_SPAN_MM + 2.0 * DIODE_PIT_MARGIN_MM
+    width = DIODE_BODY_WIDTH_MM + 2.0 * DIODE_PIT_MARGIN_MM
+    depth = box.ZLength - PLATE_SKIN_MM
+    extra = 1.0  # the pit continues below the underside for a clean cut
+    pit = Part.makeBox(
+        length,
+        width,
+        depth + extra,
+        App.Vector(-length / 2.0, -width / 2.0, box.ZMin - extra),
+    )
+    pit.rotate(App.Vector(0, 0, 0), App.Vector(0, 0, 1), diode.rotation_degrees)
+    pit.translate(diode.position)
+    volume_before = plate.Volume
+    cut = plate.cut(pit)
+    removed_volume = volume_before - cut.Volume
+    expected_volume = length * width * depth
+    if abs(removed_volume - expected_volume) > 0.01 * expected_volume:
+        raise SystemExit(
+            f"error: the diode pit removed {removed_volume:.2f} mm3, expected "
+            f"{expected_volume:.2f} mm3; it is not fully inside plate material"
+        )
+    center = diode.position
+    if inside_any(cut, App.Vector(center.x, center.y, box.ZMin + 0.3)):
+        raise SystemExit("error: the diode pit did not open the underside")
+    if not inside_any(cut, App.Vector(center.x, center.y, box.ZMax - PLATE_SKIN_MM / 2.0)):
+        raise SystemExit("error: the diode pit broke through the plate's top")
+    return cut, length, width, depth
+
+
+def turn_upside_down(plate, recess_centers):
     """Rotate the plate 180 degrees about the X axis through its center
     and drop it onto z = 0, so it prints with its top face on the bed
-    and the lead recesses opening upward. Returns the flipped plate."""
+    and the recesses (lead cones, diode pit) at `recess_centers`
+    opening upward. Returns the flipped plate."""
     center = plate.BoundBox.Center
     plate.rotate(center, App.Vector(1, 0, 0), 180)
     plate.translate(App.Vector(0, 0, -plate.BoundBox.ZMin))
     box = plate.BoundBox
-    for lead in lead_centers:
-        flipped = App.Vector(lead.x, 2.0 * center.y - lead.y, 0.0)
+    for recess in recess_centers:
+        flipped = App.Vector(recess.x, 2.0 * center.y - recess.y, 0.0)
         if not inside_any(plate, flipped.add(App.Vector(0, 0, PLATE_SKIN_MM / 2.0))):
             raise SystemExit("error: after flipping, the skin above a recess is not at the bottom")
         if inside_any(plate, flipped.add(App.Vector(0, 0, box.ZMax - 0.3))):
@@ -607,11 +835,12 @@ def shave_sides(plate, shave):
     return shaved
 
 
-def mirror_for_right_half(plate, lead_centers):
+def mirror_for_right_half(plate, recess_centers):
     """Mirror the plate across the YZ plane through its center: the
     right half's plate, since the board is reversible and that half
-    is the left one turned over, cells, screw holes, lead recesses and
-    reset hole included. Returns (plate, lead centers) both mirrored.
+    is the left one turned over, cells, screw holes, lead recesses,
+    reset hole and any diode pit included. Returns (plate, recess
+    centers) both mirrored.
 
     This has to run before turn_upside_down: Shape.mirror works on
     the geometry and drops a placement set by rotate or translate
@@ -622,10 +851,11 @@ def mirror_for_right_half(plate, lead_centers):
     mirrored = plate.mirror(center, App.Vector(1, 0, 0))
     if not mirrored.isValid() or abs(mirrored.Volume - volume_before) > 1e-6 * volume_before:
         raise SystemExit("error: mirroring the plate changed its volume")
-    mirrored_leads = [
-        App.Vector(2.0 * center.x - lead.x, lead.y, lead.z) for lead in lead_centers
+    mirrored_recesses = [
+        App.Vector(2.0 * center.x - recess.x, recess.y, recess.z)
+        for recess in recess_centers
     ]
-    return mirrored, mirrored_leads
+    return mirrored, mirrored_recesses
 
 
 def drill_holes(plate, hole_centers, hole_diameter):
@@ -699,17 +929,28 @@ def main():
         raise SystemExit("error: no lead drills found in the corner extension")
     plate, cone_height = cut_lead_cones(plate, lead_centers)
     plate, reset_center = cut_reset_hole(plate)
+    pit_centers = []
+    if arguments.covered:
+        covered_switch = placement_by_name(COVERED_SWITCH_NAME)
+        covered_diode = placement_by_name(COVERED_DIODE_NAME)
+        if arguments.right:
+            counterpart_names = right_half_counterparts(covered_switch, covered_diode)
+        plate = cover_switch_cell(plate, covered_switch.position)
+        plate, pit_length, pit_width, pit_depth = cut_diode_pit(plate, covered_diode)
+        pit_centers = [covered_diode.position]
     box = plate.BoundBox
     plate, supports = drill_holes(plate, hole_centers, arguments.hole_diameter)
     plate = shift_pattern(plate, arguments.pattern_shift)
-    lead_centers = [
-        App.Vector(lead.x + arguments.pattern_shift, lead.y, lead.z)
-        for lead in lead_centers
+    # The lead cones and the diode pit both have to open upward once
+    # the plate is turned over, so they travel together from here on.
+    recess_centers = [
+        App.Vector(recess.x + arguments.pattern_shift, recess.y, recess.z)
+        for recess in lead_centers + pit_centers
     ]
     plate = shave_sides(plate, arguments.side_shave)
     if arguments.right:
-        plate, lead_centers = mirror_for_right_half(plate, lead_centers)
-    plate = turn_upside_down(plate, lead_centers)
+        plate, recess_centers = mirror_for_right_half(plate, recess_centers)
+    plate = turn_upside_down(plate, recess_centers)
     mesh = export_stl(plate, arguments.stl_file)
 
     print(f"board:      {board_description}, {len(hole_centers)} mounting drills")
@@ -733,6 +974,18 @@ def main():
           f"{PLATE_SKIN_MM} mm of plate left above them")
     print(f"reset:      {RESET_SWITCH_HOLE_DIAMETER_MM} mm hole for "
           f"{RESET_SWITCH_NAME} at ({reset_center.x:.2f}, {reset_center.y:.2f})")
+    if arguments.covered:
+        switch = covered_switch.position
+        diode = covered_diode.position
+        right_note = ""
+        if arguments.right:
+            right_note = (f", where the right half has {counterpart_names[0]} and "
+                          f"{counterpart_names[1]}")
+        print(f"cover:      {COVERED_SWITCH_NAME}'s cutout at ({switch.x:.2f}, "
+              f"{switch.y:.2f}) filled solid, {pit_length:.2f} x {pit_width:.2f} mm "
+              f"pit {pit_depth:.2f} mm deep in the underside for "
+              f"{COVERED_DIODE_NAME} at ({diode.x:.2f}, {diode.y:.2f}), rotated "
+              f"{covered_diode.rotation_degrees:.0f} degrees{right_note}")
     for center, support in zip(hole_centers, supports):
         note = ""
         if support < SUPPORTED_HOLE_THRESHOLD:
