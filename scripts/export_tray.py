@@ -38,7 +38,7 @@ turned through 180 degrees about the X axis so it prints opening-up
 like the left one. That is not a mirror of the left tray: the sockets
 that reach the ledge on the left half do not on the right, so the
 right tray has no ledge notches, and its ledge reliefs follow that
-half's sockets.
+half's sockets and the height of its nano's sockets.
 
 Every corner, convex or concave, bends with the same pair of
 concentric radii: the corner radius on the outside of the bend and
@@ -67,22 +67,22 @@ The well inside the ledge continues the concentric corner treatment
 inward. Set ledge_width to 0 to build without a ledge.
 
 The battery switch (POWER_SWITCH_NAME) and the microcontroller with
-its USB connector (MCU_NAME) are mounted on the board's underside,
-the switch lever reaching through the wall and the connector opening
-onto it, so the wall gets a window cut through it below the board
-over the outline segment nearest each of them: one sized for the
-switch lever's travel, one for a USB-C plug. On the right half the
-plug's window is a rectangle that clears a plug's overmold. On the
+its USB connector (MCU_NAME) are mounted on the board's underside, the
+switch lever reaching through the wall and the connector opening onto
+it, so the wall gets a window cut through it below the board over the
+outline segment nearest each of them: one sized for the switch lever's
+travel, one for a USB-C plug. On the right half the plug's window is
+still the original rectangle sized for a plug's overmold. On the
 soldered left half the connector was measured, so its window is
-smaller and hugs the connector, with rounded corners and both faces
-of the wall chamfered around it. The ledge behind the wall is cut
-away over the same stretch. The switch and the microcontroller
-are located via the board sources, since the STEP carries no component
-bodies; their reach below the board comes from the package 3D models
-(see the constants). The switch body is wider than its window and
-comes close to the wall, so around that window the wall's inner face
-gets a pocket over the body's width, leaving a thin outer skin. The
-nano behind the USB window gets ledge reliefs (below).
+smaller and hugs the connector, with rounded corners and both faces of
+the wall chamfered around it. The ledge behind the wall is cut away
+over the same stretch. The switch and the microcontroller are located
+via the board sources, since the STEP carries no component bodies. The
+switch's reach below the board comes from its package 3D model, the
+nano's from measurements (see the constants). The switch body is wider
+than its window and comes close to the wall, so around that window the
+wall's inner face gets a pocket over the body's width, leaving a thin
+outer skin. The nano behind the USB window gets ledge reliefs (below).
 
 The hotswap sockets hang under the board too, and in the switch
 column along the west edge each socket ends in a narrow tab that
@@ -94,12 +94,13 @@ follows from the switch placements in the board sources, so the
 notches track the layout.
 
 Beyond that, the ledge is relieved wherever an underside body (the
-nice!nano and the sockets, as rectangles measured on the populated
-STEP export) comes within LEDGE_RELIEF_CLEARANCE_MM of
-its inner face along a straight wall segment: through its full
-width over the body's extent plus the clearance, down to the body's
-reach plus a margin, leaving the wall and the rest of the ledge. The
-first printed left half bound on the nano, 0.03 mm from the ledge.
+nice!nano at its measured depth and the sockets, as rectangles
+measured on the populated STEP export) comes within
+LEDGE_RELIEF_CLEARANCE_MM of its inner face along a straight wall
+segment: through its full width over the body's extent plus the
+clearance, down to the body's reach plus a margin, leaving the wall
+and the rest of the ledge. The first printed left half bound on the
+nano, 0.03 mm from the ledge.
 
 The design values live in the constants right below this docstring;
 everything else derives from them.
@@ -172,20 +173,34 @@ WINDOW_MARGIN_MM = 0.5  # switch window and pocket edges beyond the body: below,
 # opening onto the board outline, so the wall gets a second window
 # over the outline segment nearest the connector. The connector end is
 # the far end of the nice!nano package along the footprint's +Y axis,
-# 18.7 mm from the footprint origin (the center of the pin rows); the
-# receptacle's center lies 3.35 mm below the board's underside
-# (receptacle 1.77 to 4.93 mm below it, the nano board itself 2.75 to
-# 4.15 mm), measured like the switch on the populated STEP export.
-# On the right half the window is centered on that and sized for a
-# USB-C plug's overmold (12.35 x 6.5 mm at most per the USB Type-C
-# specification), not just its shell: the model puts the receptacle's
-# mouth 0.9 mm behind the wall's outer face and a plug only seats when
-# its overmold can come within a fraction of a millimetre of the
-# mouth. That half's connector sits on taller sockets and is measured
-# once soldered.
+# 18.7 mm from the footprint origin (the center of the pin rows).
+# How deep the nano hangs was measured on the real parts (user,
+# 2026-10-12), since the package model gets it wrong: the nano is
+# soldered to pins and sits flush on Mill-Max sockets with its
+# component side facing the board, so its PCB starts the sockets'
+# height below the board (2.56 mm on the left half, 4.3 mm on the
+# right, where the model assumes 2.75 mm). Its PCB is 1.6 mm thick
+# (the model has 1.4 mm), and the receptacle's shell sits flush with
+# the nano's underside (the model has it straddling the nano board,
+# 0.78 mm past its underside). So the nano and its connector reach
+# down to the socket height plus 1.6 mm below the board. The shell's
+# 3.16 mm height comes from the model.
 MCU_NAME = "U1"
 MCU_USB_END_OFFSET_MM = 18.7
-USB_RECEPTACLE_CENTER_BELOW_BOARD_MM = 3.35
+LEFT_NANO_SOCKET_HEIGHT_MM = 2.56
+RIGHT_NANO_SOCKET_HEIGHT_MM = 4.30
+NANO_PCB_THICKNESS_MM = 1.6
+# The right half's window is still the original one, centered where
+# the package model puts the receptacle (3.35 mm below the board) and
+# sized for a USB-C plug's overmold (12.35 x 6.5 mm at most per the
+# USB Type-C specification), not just its shell, so a plug seats even
+# if the receptacle's mouth sits behind the wall. That half is
+# measured once soldered. With the measured chain its shell will span
+# 2.74 to 5.90 mm below the board (center 4.32 mm), which this window
+# still contains, but a full size overmold centered on it would end
+# 0.22 mm below the window, and the mouth sits behind the wall (0.56 mm
+# on the left half).
+RIGHT_USB_WINDOW_CENTER_BELOW_BOARD_MM = 3.35
 USB_WINDOW_WIDTH_MM = 14.0
 USB_WINDOW_HEIGHT_MM = 8.0
 
@@ -204,17 +219,12 @@ LEFT_USB_WINDOW_CENTER_BELOW_BOARD_MM = 2.60
 LEFT_USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM = 0.25
 # The nano's package model has the receptacle shell ("usb4520-03-0-a
 # v1") 8.94 x 3.16 mm at its mouth with a 1.28 mm outer corner radius.
-# If the soldered connector sits centered in the window, as the
-# measured pull-ins say, the window clears it by (4.5 - 3.16) / 2 =
-# 0.67 mm above and below and by 0.78 mm across, and a 1.28 + 0.67 =
-# 1.95 mm radius makes the corners concentric with the shell's
-# vertically. The model chain (board underside 8.0 mm above the floor,
-# the 2.56 mm Mill-Max sockets with the nano flush on them, the
-# receptacle centered 0.60 mm below the nano's face) puts the shell
-# center 3.16 mm below the board instead, 0.56 mm lower than measured.
-# That difference is unresolved: either the heat-set inserts stand
-# proud and lift the board, or the real nano's receptacle offset
-# differs from the model's.
+# The measured chain above puts the left shell 1.00 to 4.16 mm below
+# the board, its center 2.58 mm below, 0.02 mm from the window's
+# center, so the window clears it by about 0.67 mm above and below.
+# Across, the pull-ins center it with 0.78 mm to spare on each side. A
+# 1.28 + 0.67 = 1.95 mm radius makes the corners concentric with the
+# shell's vertically.
 LEFT_USB_WINDOW_CORNER_RADIUS_MM = 1.95
 LEFT_USB_WINDOW_CHAMFER_MM = 0.2  # 45 degrees, on the wall's outer and inner faces
 
@@ -246,16 +256,17 @@ LEDGE_NOTCH_CLEARANCE_MM = 0.5
 # rectangles in footprint coordinates, (x range, y range, reach below
 # the board), measured on the populated STEP export like the tab tip:
 # the nice!nano's PCB and its USB-C receptacle (which reaches past the
-# PCB's end and deeper), and the hotswap socket as its two offset
-# lobes and its two 1.7 mm end tabs. Inside the west column's notches
-# a tab's relief finds nothing left to cut; at the step corners of the
-# south edge, where the notch logic passes (the tab tip is nearest a
-# corner, not a straight stretch), it is what clears the tab. The
-# first printed left half bound on the nano's north edge, 0.03 mm from
-# the ledge.
-MCU_BODY_RECTANGLES_MM = (
-    ("PCB", (-8.90, 8.90), (-15.45, 17.75), 4.15),
-    ("USB-C receptacle", (-5.85, 5.85), (11.51, 18.71), 4.93),
+# PCB's end), both reaching down to the nano's underside on that half
+# (see the nano constants above), and the hotswap socket as its two
+# offset lobes and its two 1.7 mm end tabs. Inside the west column's
+# notches a tab's relief finds nothing left to cut; at the step
+# corners of the south edge, where the notch logic passes (the tab tip
+# is nearest a corner, not a straight stretch), it is what clears the
+# tab. The first printed left half bound on the nano's north edge,
+# 0.03 mm from the ledge.
+MCU_BODY_RECTANGLES_MM = (  # (part, x range, y range), reach per half
+    ("PCB", (-8.90, 8.90), (-15.45, 17.75)),
+    ("USB-C receptacle", (-5.85, 5.85), (11.51, 18.71)),
 )
 HOTSWAP_SOCKET_RECTANGLES_MM = (
     ((-8.22, -3.57), (-2.25, 2.25), 2.02),  # lobe
@@ -1287,7 +1298,7 @@ def main():
     _usb_index, usb_window_center, usb_direction = nearest_outline_segment(
         segments, usb_end
     )
-    usb_window_middle = board_underside - USB_RECEPTACLE_CENTER_BELOW_BOARD_MM
+    usb_window_middle = board_underside - RIGHT_USB_WINDOW_CENTER_BELOW_BOARD_MM
     usb_window_bottom = usb_window_middle - USB_WINDOW_HEIGHT_MM / 2.0
     usb_window_top = usb_window_middle + USB_WINDOW_HEIGHT_MM / 2.0
     usb_window_width = USB_WINDOW_WIDTH_MM
@@ -1368,9 +1379,13 @@ def main():
                 f"{name} socket",
             )
             ledge_notches.append((name, closest, past_edge))
+        nano_socket_height = (
+            RIGHT_NANO_SOCKET_HEIGHT_MM if arguments.right else LEFT_NANO_SOCKET_HEIGHT_MM
+        )
+        nano_reach = nano_socket_height + NANO_PCB_THICKNESS_MM
         bodies = [
-            (f"{MCU_NAME} {part}", mcu_by_name[MCU_NAME], x_range, y_range, reach)
-            for part, x_range, y_range, reach in MCU_BODY_RECTANGLES_MM
+            (f"{MCU_NAME} {part}", mcu_by_name[MCU_NAME], x_range, y_range, nano_reach)
+            for part, x_range, y_range in MCU_BODY_RECTANGLES_MM
         ]
         for name in sorted(switches):
             if switches[name].flipped == open_toward_positive_axis:
