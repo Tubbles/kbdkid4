@@ -89,18 +89,29 @@ column along the west edge each socket ends in a narrow tab that
 reaches the board outline, where the ledge would sit. Every socket
 whose tab reaches into the ledge gets a notch cut into the ledge,
 through its full width, LEDGE_NOTCH_WIDTH_MM along the wall and
-LEDGE_NOTCH_DEPTH_MM down from the ledge top. Which sockets qualify
-follows from the switch placements in the board sources, so the
-notches track the layout.
+LEDGE_NOTCH_DEPTH_MM down from the ledge top. The tab's tip ends past
+the board edge, so the wall's inner face gets a pocket there (behind
+the notch, or on its own without a ledge) over the same width and
+height, continued up past the ledge top, deep and tall enough to
+leave the tip LEDGE_NOTCH_CLEARANCE_MM from the wall. Which sockets
+qualify follows from the switch placements in the board sources, so
+the notches track the layout.
 
 Beyond that, the ledge is relieved wherever an underside body (the
-nice!nano at its measured depth and the sockets, as rectangles
-measured on the populated STEP export) comes within
-LEDGE_RELIEF_CLEARANCE_MM of its inner face along a straight wall
-segment: through its full width over the body's extent plus the
-clearance, down to the body's reach plus a margin, leaving the wall
-and the rest of the ledge. The first printed left half bound on the
-nano, 0.03 mm from the ledge.
+nice!nano at its measured depth, the sockets and the battery
+connector, as convex polygons measured on the populated STEP export)
+comes within LEDGE_RELIEF_CLEARANCE_MM of its inner face along a
+straight wall segment: through its full width over the body's extent
+plus the clearance, down to the body's reach plus a margin, leaving
+the wall and the rest of the ledge. The first printed left half bound
+on the nano, 0.03 mm from the ledge.
+
+The same bodies are kept clear of the standoffs: wherever one comes
+within STANDOFF_RELIEF_CLEARANCE_MM of a standoff in plan view, the
+standoff gets a vertical flat on the side facing it, from its top
+down to the body's reach plus that clearance. A flat that would
+leave less than STANDOFF_RELIEF_MINIMUM_WALL_MM of plastic around the
+insert bore is refused.
 
 The design values live in the constants right below this docstring;
 everything else derives from them.
@@ -232,7 +243,15 @@ USB_WINDOW_CHAMFER_MM = 0.2  # 45 degrees, on the wall's outer and inner faces
 # the ledge's full width. A socket qualifies when its tip comes within
 # LEDGE_NOTCH_CLEARANCE_MM of the ledge's inner face. Only switches
 # whose sockets face the cavity count: those on the side away from the
-# opening.
+# opening. With the default gap the tip then ends 0.17 mm from the
+# wall, less than a print's swelling, so the wall's inner face there
+# gets a pocket over the notch's width, deep enough to leave the tip
+# LEDGE_NOTCH_CLEARANCE_MM from the wall (0.33 mm deep, leaving
+# 0.47 mm of wall), also without a ledge, since the tip's distance to
+# the wall does not depend on it. It reaches from the notch's bottom to
+# LEDGE_NOTCH_CLEARANCE_MM above the ledge top, since the tab's top
+# sits only 0.17 mm under the board and a pocket ending at the ledge
+# top left it 0.24 mm from the wall's edge there.
 KEY_SWITCH_NAME_PATTERN = re.compile(r"S[0-9]{3}")
 HOTSWAP_SOCKET_TAB_TIP_MM = (-3.70, 9.28)
 LEDGE_NOTCH_WIDTH_MM = 3.0
@@ -246,29 +265,78 @@ LEDGE_NOTCH_CLEARANCE_MM = 0.5
 # width over the body's extent along that segment plus the clearance
 # at both ends, from the ledge top down to the body's reach below the
 # board plus LEDGE_RELIEF_MARGIN_BELOW_MM. The wall stays. Bodies are
-# rectangles in footprint coordinates, (x range, y range, reach below
-# the board), measured on the populated STEP export like the tab tip:
-# the nice!nano's PCB and its USB-C receptacle (which reaches past the
-# PCB's end), both reaching down to the nano's underside on that half
-# (see the nano constants above), and the hotswap socket as its two
-# offset lobes and its two 1.7 mm end tabs. Inside the west column's
-# notches a tab's relief finds nothing left to cut; at the step
-# corners of the south edge, where the notch logic passes (the tab tip
-# is nearest a corner, not a straight stretch), it is what clears the
-# tab. The first printed left half bound on the nano's north edge,
-# 0.03 mm from the ledge.
+# convex polygons in footprint coordinates with a reach below the
+# board, measured on the populated STEP export like the tab tip: the
+# nice!nano's PCB and its USB-C receptacle (which reaches past the
+# PCB's end) as rectangles, both reaching down to the nano's underside
+# on that half (see the nano constants above), the battery connector
+# (below) as a rectangle, and the hotswap socket as its two offset
+# lobes and its two 1.7 mm end tabs, corners in order around each. The
+# lobe nearer the tab tip has its corner beside the tab rounded with
+# 0.8 mm, so its polygon replaces that corner with a 45 degree chamfer
+# just outside the round: as a rectangle corner it stood 0.39 mm proud
+# of the body right where the standoffs beside S150 and S141 face it.
+# Inside the west column's notches a tab's relief finds nothing left
+# to cut; at the step corners of the south edge, where the notch logic
+# passes (the tab tip is nearest a corner, not a straight stretch), it
+# is what clears the tab. The first printed left half bound on the
+# nano's north edge, 0.03 mm from the ledge.
 MCU_BODY_RECTANGLES_MM = (  # (part, x range, y range), reach per half
     ("PCB", (-8.90, 8.90), (-15.45, 17.75)),
     ("USB-C receptacle", (-5.85, 5.85), (11.51, 18.71)),
 )
-HOTSWAP_SOCKET_RECTANGLES_MM = (
-    ((-8.22, -3.57), (-2.25, 2.25), 2.02),  # lobe
-    ((-6.02, -1.37), (2.25, 7.60), 2.02),  # lobe
-    ((-4.54, -2.86), (7.60, 9.28), 2.02),  # tab, tip at HOTSWAP_SOCKET_TAB_TIP_MM
-    ((-6.74, -5.06), (-3.87, -2.25), 2.02),  # tab at the other end
+HOTSWAP_SOCKET_POLYGONS_MM = (  # (corners, reach below the board)
+    (  # lobe
+        ((-8.22, -2.25), (-3.57, -2.25), (-3.57, 2.25), (-8.22, 2.25)),
+        2.02,
+    ),
+    (  # lobe, its corner beside the tab chamfered
+        ((-6.02, 2.25), (-1.37, 2.25), (-1.37, 7.60), (-5.47, 7.60), (-6.02, 7.05)),
+        2.02,
+    ),
+    (  # tab, tip at HOTSWAP_SOCKET_TAB_TIP_MM
+        ((-4.54, 7.60), (-2.86, 7.60), (-2.86, 9.28), (-4.54, 9.28)),
+        2.02,
+    ),
+    (  # tab at the other end
+        ((-6.74, -3.87), (-5.06, -3.87), (-5.06, -2.25), (-6.74, -2.25)),
+        2.02,
+    ),
 )
 LEDGE_RELIEF_CLEARANCE_MM = 0.5
 LEDGE_RELIEF_MARGIN_BELOW_MM = 0.5
+
+# The battery connector (a JST PH S2B-PH-K lying on the board's
+# underside) measured on the populated STEP export like the sockets:
+# a 5.9 x 7.6 mm body reaching 4.85 mm below the board. It is J1 on
+# the left half and J2 on the right, the same part turned over at the
+# same position.
+LEFT_BATTERY_CONNECTOR_NAME = "J1"
+RIGHT_BATTERY_CONNECTOR_NAME = "J2"
+BATTERY_CONNECTOR_RECTANGLE_MM = ((-2.95, 2.95), (-3.75, 3.85))  # x range, y range
+BATTERY_CONNECTOR_BELOW_BOARD_MM = 4.85
+
+# Wherever an underside body (the ones above) comes within
+# STANDOFF_RELIEF_CLEARANCE_MM of a standoff in plan view, the
+# standoff gets a vertical flat on the side facing it: a plane
+# perpendicular to the direction from the standoff's center to the
+# body's nearest point, the clearance short of that point. The body is
+# convex, so all of it then lies at least the clearance beyond the
+# flat. The flat runs from the standoff top down to the body's reach
+# below the board plus the clearance, never below the floor, so the
+# full standoff below it keeps the clearance from the body's bottom
+# edge too (with the ledge reliefs' 0.5 mm margin there, S150 ended
+# up 0.70 mm from it). The clearance is twice the ledge reliefs'
+# because at 0.5 mm the close spots would barely change (by their
+# footprints, socket S150 0.49 mm from a standoff would get a 0.01 mm
+# flat, socket S141 at 0.63 mm and the battery connector at 0.76 mm
+# none), the standoffs have 1.3 mm of plastic around the bore to
+# spare, and the board can shift about 0.2 mm in the cavity before the
+# screws pull it into place. A flat that would leave less than
+# STANDOFF_RELIEF_MINIMUM_WALL_MM of plastic between it and the insert
+# bore is refused (the closest, S150's, leaves 0.79 mm).
+STANDOFF_RELIEF_CLEARANCE_MM = 1.0
+STANDOFF_RELIEF_MINIMUM_WALL_MM = 0.6
 
 # Implementation tuning, rarely worth touching.
 CORNER_FIT_SAFETY = 0.95  # margin on the largest corner radius that fits
@@ -1029,9 +1097,10 @@ def relieve_ledge(
     a corner (the straight segments stop where the corner arcs begin,
     and a body beside a corner needs the corner's ledge gone too) and
     never touches a wall; a stub shorter than 1 mm left at a segment
-    end goes too. `corners` are the body's footprint corners in board
-    coordinates. Returns (tray, reliefs), one (center, length, depth,
-    removed volume) per segment that was cut."""
+    end goes too. `corners` are the corners of the body's convex
+    footprint polygon in board coordinates. Returns (tray, reliefs),
+    one (center, length, depth, removed volume) per segment that was
+    cut."""
     ledge_reach = ledge_width - gap
     depth = reach + margin
     reliefs = []
@@ -1092,6 +1161,114 @@ def relieve_ledge(
                 raise SystemExit(f"error: the {label} ledge relief cut into the wall")
         tray = result
         reliefs.append((center, high - low, depth, removed))
+    return tray, reliefs
+
+
+def rectangle_polygon(x_range, y_range):
+    """A footprint rectangle's corners in order around it."""
+    (x_low, x_high), (y_low, y_high) = x_range, y_range
+    return ((x_low, y_low), (x_high, y_low), (x_high, y_high), (x_low, y_high))
+
+
+def nearest_footprint_point(corners, center, up):
+    """(distance, point) from `center` to the nearest point of a body's
+    footprint polygon, in the plane through `center` perpendicular to
+    `up`. The distance is zero when `center` lies inside it."""
+    flat = [corner.sub(up * up.dot(corner.sub(center))) for corner in corners]
+    face = Part.Face(Part.makePolygon(flat + [flat[0]]))
+    distance, pairs, _info = face.distToShape(Part.Vertex(center))
+    return distance, pairs[0][0]
+
+
+def circular_segment_area(radius, chord_distance):
+    """Area of the part of a circle beyond a chord at `chord_distance`
+    from its center."""
+    half_chord = math.sqrt(radius**2 - chord_distance**2)
+    return radius**2 * math.acos(chord_distance / radius) - chord_distance * half_chord
+
+
+def relieve_standoffs(
+    tray, hole_centers, up, corners, reach, label, standoff_top,
+    standoff_radius, bore_radius, clearance, minimum_wall,
+):
+    """Cut a vertical flat into every standoff the body comes within
+    `clearance` of in plan view, on the side facing it: a plane
+    perpendicular to the direction from the standoff's center to the
+    body's nearest point, `clearance` short of that point. The body is
+    convex, so all of it then lies at least `clearance` beyond the
+    plane. The flat runs from the standoff top down to `reach` plus
+    `clearance` below the board, so the full standoff below it keeps
+    that clearance from the body's bottom too, but never below the
+    floor's top. `corners` are the corners of the body's footprint
+    polygon in board coordinates. Returns (tray, reliefs), one (center,
+    flat depth, plastic left around the bore, body distance, flat
+    bottom, removed volume) per flat."""
+    reliefs = []
+    for center in hole_centers:
+        distance, nearest = nearest_footprint_point(corners, center, up)
+        plane_distance = distance - clearance
+        if plane_distance >= standoff_radius:
+            continue  # the body clears this standoff
+        plastic = plane_distance - bore_radius
+        if plastic < minimum_wall:
+            raise SystemExit(
+                f"error: the {label} standoff relief at ({center.x:.2f}, "
+                f"{center.y:.2f}) would leave {plastic:.2f} mm around the insert "
+                f"bore, less than {minimum_wall} mm"
+            )
+        toward_body = nearest.sub(center).normalize()
+        along_flat = toward_body.cross(up)
+        bottom = max(standoff_top - reach - clearance, 0.0)
+        height = standoff_top - bottom
+        reach_out = standoff_radius + 0.5  # past the standoff's side
+        base = center.add(up * bottom)
+        polygon = [
+            base.add(toward_body * plane_distance).add(along_flat * -reach_out),
+            base.add(toward_body * plane_distance).add(along_flat * reach_out),
+            base.add(toward_body * reach_out).add(along_flat * reach_out),
+            base.add(toward_body * reach_out).add(along_flat * -reach_out),
+        ]
+        cutter = Part.Face(Part.makePolygon(polygon + [polygon[0]])).extrude(
+            up * (height + CAVITY_CUT_EXTRA_MM)
+        )
+        removable = tray.common(cutter).Volume
+        if removable < 1e-3:
+            continue  # an earlier flat on this standoff already opened it
+        segment_volume = circular_segment_area(standoff_radius, plane_distance) * height
+        if removable > 1.002 * segment_volume + 1e-3:
+            raise SystemExit(
+                f"error: the {label} standoff relief would remove {removable:.2f} "
+                f"mm3, more than the standoff's {segment_volume:.2f} mm3 beyond "
+                "the flat; it reaches something else"
+            )
+        result = tray.cut(cutter)
+        if not result.isValid() or len(result.Solids) != 1:
+            raise SystemExit(f"error: the {label} standoff relief broke the solid")
+        removed = tray.Volume - result.Volume
+        if abs(removed - removable) > 0.02 * removable + 1e-3:
+            raise SystemExit(
+                f"error: the {label} standoff relief removed {removed:.2f} mm3, "
+                f"expected {removable:.2f} mm3; geometry is off"
+            )
+        solid = result.Solids[0]
+
+        def probe(radial, z):
+            return center.add(toward_body * radial).add(up * z)
+
+        middle = bottom + height / 2.0
+        beyond_flat = (plane_distance + standoff_radius) / 2.0
+        if solid.isInside(probe(beyond_flat, middle), 1e-6, True):
+            raise SystemExit(f"error: the {label} standoff relief did not open the flat")
+        if not solid.isInside(probe((bore_radius + plane_distance) / 2.0, middle), 1e-6, True):
+            raise SystemExit(f"error: the {label} standoff relief cut into the bore's wall")
+        below = probe(beyond_flat, bottom - 0.3)
+        if tray.isInside(below, 1e-6, True) and not solid.isInside(below, 1e-6, True):
+            raise SystemExit(f"error: the {label} standoff relief reaches too low")
+        tray = result
+        reliefs.append(
+            (center, standoff_radius - plane_distance, plastic,
+             distance - standoff_radius, bottom, removed)
+        )
     return tray, reliefs
 
 
@@ -1322,23 +1499,55 @@ def main():
         arguments.ledge_width,
         "usb",
     )
+    switches = component_placements(KEY_SWITCH_NAME_PATTERN)
+    battery_connector_name = (
+        RIGHT_BATTERY_CONNECTOR_NAME if arguments.right else LEFT_BATTERY_CONNECTOR_NAME
+    )
+    battery_connector_by_name = component_placements(
+        re.compile(re.escape(battery_connector_name))
+    )
+    if battery_connector_name not in battery_connector_by_name:
+        raise SystemExit(
+            f"error: battery connector '{battery_connector_name}' not found in the "
+            "board sources"
+        )
+    nano_reach = nano_socket_height + NANO_PCB_THICKNESS_MM
+    bodies = [
+        (f"{MCU_NAME} {part}", mcu_by_name[MCU_NAME],
+         rectangle_polygon(x_range, y_range), nano_reach)
+        for part, x_range, y_range in MCU_BODY_RECTANGLES_MM
+    ]
+    bodies.append((
+        f"{battery_connector_name} battery connector",
+        battery_connector_by_name[battery_connector_name],
+        rectangle_polygon(*BATTERY_CONNECTOR_RECTANGLE_MM),
+        BATTERY_CONNECTOR_BELOW_BOARD_MM,
+    ))
+    for name in sorted(switches):
+        if switches[name].flipped == open_toward_positive_axis:
+            continue  # its socket faces the opening, not the cavity
+        for polygon, reach in HOTSWAP_SOCKET_POLYGONS_MM:
+            bodies.append((f"{name} socket", switches[name], polygon, reach))
+    body_footprints = [
+        (label, [placement.map_point(App.Vector(x, y, 0.0)) for x, y in polygon], reach)
+        for label, placement, polygon, reach in bodies
+    ]
     ledge_notches = []
+    tab_pockets = []
     ledge_reliefs = []
-    if arguments.ledge_width > arguments.gap:
-        ledge_reach = arguments.ledge_width - arguments.gap
-        switches = component_placements(KEY_SWITCH_NAME_PATTERN)
-        for name in sorted(switches):
-            placement = switches[name]
-            if placement.flipped == open_toward_positive_axis:
-                continue  # its socket faces the opening, not the cavity
-            tip = placement.map_point(App.Vector(*HOTSWAP_SOCKET_TAB_TIP_MM, 0.0))
-            _index, closest, direction = nearest_outline_segment(segments, tip)
-            if abs(direction.dot(tip.sub(closest))) > 1e-6:
-                continue  # nearest to a corner, not alongside a straight wall
-            outward = wall_outward(resting_face.OuterWire, closest, direction, up)
-            past_edge = outward.dot(tip.sub(closest))
-            if past_edge < -(ledge_reach + LEDGE_NOTCH_CLEARANCE_MM):
-                continue
+    has_ledge = arguments.ledge_width > arguments.gap
+    ledge_reach = arguments.ledge_width - arguments.gap
+    for name in sorted(switches):
+        placement = switches[name]
+        if placement.flipped == open_toward_positive_axis:
+            continue  # its socket faces the opening, not the cavity
+        tip = placement.map_point(App.Vector(*HOTSWAP_SOCKET_TAB_TIP_MM, 0.0))
+        _index, closest, direction = nearest_outline_segment(segments, tip)
+        if abs(direction.dot(tip.sub(closest))) > 1e-6:
+            continue  # nearest to a corner, not alongside a straight wall
+        outward = wall_outward(resting_face.OuterWire, closest, direction, up)
+        past_edge = outward.dot(tip.sub(closest))
+        if has_ledge and past_edge >= -(ledge_reach + LEDGE_NOTCH_CLEARANCE_MM):
             tray = cut_ledge_notch(
                 tray,
                 resting_face.OuterWire,
@@ -1354,21 +1563,27 @@ def main():
                 f"{name} socket",
             )
             ledge_notches.append((name, closest, past_edge))
-        nano_reach = nano_socket_height + NANO_PCB_THICKNESS_MM
-        bodies = [
-            (f"{MCU_NAME} {part}", mcu_by_name[MCU_NAME], x_range, y_range, nano_reach)
-            for part, x_range, y_range in MCU_BODY_RECTANGLES_MM
-        ]
-        for name in sorted(switches):
-            if switches[name].flipped == open_toward_positive_axis:
-                continue  # its socket faces the opening, not the cavity
-            for x_range, y_range, reach in HOTSWAP_SOCKET_RECTANGLES_MM:
-                bodies.append((f"{name} socket", switches[name], x_range, y_range, reach))
-        for label, placement, x_range, y_range, reach in bodies:
-            corners = [
-                placement.map_point(App.Vector(x, y, 0.0))
-                for x in x_range for y in y_range
-            ]
+        # The tip's distance to the wall does not depend on the ledge.
+        pocket_depth = LEDGE_NOTCH_CLEARANCE_MM - (arguments.gap - past_edge)
+        if pocket_depth > 0:
+            tray, pocket_volume = cut_wall_pocket(
+                tray,
+                resting_face.OuterWire,
+                up,
+                closest,
+                direction,
+                LEDGE_NOTCH_WIDTH_MM,
+                board_underside - LEDGE_NOTCH_DEPTH_MM,
+                board_underside + LEDGE_NOTCH_CLEARANCE_MM,
+                arguments.gap,
+                arguments.wall,
+                arguments.ledge_width,
+                arguments.wall - pocket_depth,
+                f"{name} socket tab",
+            )
+            tab_pockets.append((name, closest, pocket_depth, pocket_volume))
+    if has_ledge:
+        for label, corners, reach in body_footprints:
             tray, reliefs = relieve_ledge(
                 tray, cavity_prism, segments, resting_face.OuterWire, up, corners,
                 reach, label, board_underside, arguments.gap, arguments.wall,
@@ -1376,6 +1591,14 @@ def main():
                 LEDGE_RELIEF_MARGIN_BELOW_MM,
             )
             ledge_reliefs.extend((label,) + relief for relief in reliefs)
+    standoff_reliefs = []
+    for label, corners, reach in body_footprints:
+        tray, reliefs = relieve_standoffs(
+            tray, hole_centers, up, corners, reach, label, board_underside,
+            arguments.standoff_diameter / 2.0, arguments.standoff_hole_diameter / 2.0,
+            STANDOFF_RELIEF_CLEARANCE_MM, STANDOFF_RELIEF_MINIMUM_WALL_MM,
+        )
+        standoff_reliefs.extend((label,) + relief for relief in reliefs)
     if arguments.right:
         tray = turn_for_printing(tray, up, arguments.floor, arguments.depth)
     mesh = export_stl(tray, arguments.stl_file)
@@ -1427,12 +1650,27 @@ def main():
               f"{name}'s socket at ({closest.x:.2f}, {closest.y:.2f}); the socket "
               f"tab ends {past_edge:+.2f} mm past the board edge, "
               f"{arguments.gap - past_edge:.2f} mm from the wall")
+    for name, closest, pocket_depth, pocket_volume in tab_pockets:
+        print(f"tab pocket: {LEDGE_NOTCH_WIDTH_MM} x "
+              f"{LEDGE_NOTCH_DEPTH_MM + LEDGE_NOTCH_CLEARANCE_MM} mm, "
+              f"{pocket_depth:.2f} mm into the wall's inner face for {name}'s socket "
+              f"tab at ({closest.x:.2f}, {closest.y:.2f}), "
+              f"{arguments.wall - pocket_depth:.2f} mm of wall left, the tab tip "
+              f"{LEDGE_NOTCH_CLEARANCE_MM} mm from it, {pocket_volume:.1f} mm3")
     if arguments.ledge_width > arguments.gap and not ledge_reliefs:
         print(f"ledge relief: none, every underside body clears the ledge by "
               f"{arguments.relief_clearance} mm")
     for label, center, length, depth, removed in ledge_reliefs:
         print(f"ledge relief: {length:.1f} mm along the wall, {depth:.2f} mm deep, "
               f"for {label} at ({center.x:.2f}, {center.y:.2f}), {removed:.1f} mm3")
+    if not standoff_reliefs:
+        print(f"standoff relief: none, every underside body clears the standoffs by "
+              f"{STANDOFF_RELIEF_CLEARANCE_MM} mm")
+    for label, center, flat_depth, plastic, body_distance, bottom, removed in standoff_reliefs:
+        print(f"standoff relief: {flat_depth:.2f} mm deep flat, {bottom:.2f} to "
+              f"{board_underside:.2f} mm above the floor, on the standoff at "
+              f"({center.x:.2f}, {center.y:.2f}) for {label} ({body_distance:.2f} mm "
+              f"from it), {plastic:.2f} mm left around the bore, {removed:.1f} mm3")
     print(f"wrote:      {arguments.stl_file} ({mesh.CountFacets} facets)")
 
 
