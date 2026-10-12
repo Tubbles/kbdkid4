@@ -71,8 +71,12 @@ its USB connector (MCU_NAME) are mounted on the board's underside,
 the switch lever reaching through the wall and the connector opening
 onto it, so the wall gets a window cut through it below the board
 over the outline segment nearest each of them: one sized for the
-switch lever's travel, one for a USB-C plug. The ledge behind the wall
-is cut away over the same stretch. The switch and the microcontroller
+switch lever's travel, one for a USB-C plug. On the right half the
+plug's window is a rectangle that clears a plug's overmold. On the
+soldered left half the connector was measured, so its window is
+smaller and hugs the connector, with rounded corners and both faces
+of the wall chamfered around it. The ledge behind the wall is cut
+away over the same stretch. The switch and the microcontroller
 are located via the board sources, since the STEP carries no component
 bodies; their reach below the board comes from the package 3D models
 (see the constants). The switch body is wider than its window and
@@ -166,22 +170,53 @@ WINDOW_MARGIN_MM = 0.5  # switch window and pocket edges beyond the body: below,
 
 # The nice!nano hangs under the board with its USB-C receptacle
 # opening onto the board outline, so the wall gets a second window
-# over the outline segment nearest the connector. It is sized for a
+# over the outline segment nearest the connector. The connector end is
+# the far end of the nice!nano package along the footprint's +Y axis,
+# 18.7 mm from the footprint origin (the center of the pin rows); the
+# receptacle's center lies 3.35 mm below the board's underside
+# (receptacle 1.77 to 4.93 mm below it, the nano board itself 2.75 to
+# 4.15 mm), measured like the switch on the populated STEP export.
+# On the right half the window is centered on that and sized for a
 # USB-C plug's overmold (12.35 x 6.5 mm at most per the USB Type-C
-# specification), not just its shell: the receptacle's mouth sits
-# 0.9 mm behind the wall's outer face and a plug only seats when its
-# overmold can come within a fraction of a millimetre of the mouth.
-# The connector end is the far end of the nice!nano package along the
-# footprint's +Y axis, 18.7 mm from the footprint origin (the center
-# of the pin rows); the receptacle's center lies 3.35 mm below the
-# board's underside (receptacle 1.77 to 4.93 mm below it, the nano
-# board itself 2.75 to 4.15 mm), measured like the switch on the
-# populated STEP export.
+# specification), not just its shell: the model puts the receptacle's
+# mouth 0.9 mm behind the wall's outer face and a plug only seats when
+# its overmold can come within a fraction of a millimetre of the
+# mouth. That half's connector sits on taller sockets and is measured
+# once soldered.
 MCU_NAME = "U1"
 MCU_USB_END_OFFSET_MM = 18.7
 USB_RECEPTACLE_CENTER_BELOW_BOARD_MM = 3.35
 USB_WINDOW_WIDTH_MM = 14.0
 USB_WINDOW_HEIGHT_MM = 8.0
+
+# On the soldered left half the receptacle's mouth sits only 0.56 mm
+# behind the wall's outer face, so the wall hugs the connector with a
+# window of its own, measured on that half as the earlier 14 x 8 mm
+# window with its top edge pulled in 1.0 mm, its bottom edge 2.5 mm,
+# its end nearer the power switch 2.0 mm and its other end 1.5 mm.
+# Along the wall its center sits away from the power switch by the
+# given offset, from the outline point nearest the connector end that
+# the right half's window is centered on. Its corners are rounded like
+# the connector's and both faces of the wall are chamfered around it.
+LEFT_USB_WINDOW_WIDTH_MM = 10.5
+LEFT_USB_WINDOW_HEIGHT_MM = 4.5
+LEFT_USB_WINDOW_CENTER_BELOW_BOARD_MM = 2.60
+LEFT_USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM = 0.25
+# The nano's package model has the receptacle shell ("usb4520-03-0-a
+# v1") 8.94 x 3.16 mm at its mouth with a 1.28 mm outer corner radius.
+# If the soldered connector sits centered in the window, as the
+# measured pull-ins say, the window clears it by (4.5 - 3.16) / 2 =
+# 0.67 mm above and below and by 0.78 mm across, and a 1.28 + 0.67 =
+# 1.95 mm radius makes the corners concentric with the shell's
+# vertically. The model chain (board underside 8.0 mm above the floor,
+# the 2.56 mm Mill-Max sockets with the nano flush on them, the
+# receptacle centered 0.60 mm below the nano's face) puts the shell
+# center 3.16 mm below the board instead, 0.56 mm lower than measured.
+# That difference is unresolved: either the heat-set inserts stand
+# proud and lift the board, or the real nano's receptacle offset
+# differs from the model's.
+LEFT_USB_WINDOW_CORNER_RADIUS_MM = 1.95
+LEFT_USB_WINDOW_CHAMFER_MM = 0.2  # 45 degrees, on the wall's outer and inner faces
 
 # The key switches' hotswap sockets (Kailh Choc PG1350 with the
 # CPG135001S001 socket) hang 2.0 mm under the board, and each ends in
@@ -622,6 +657,209 @@ def cut_wall_window(
     return result
 
 
+def rounded_rectangle_wire(center, along_axis, up_axis, half_width, half_height, radius):
+    """A rectangle with rounded corners in the plane spanned by two unit
+    vectors, centered on `center`: `half_width` along `along_axis`,
+    `half_height` along `up_axis`. Its edges always run arc, line, arc,
+    line, ... from the same corner, so two such wires loft edge to
+    edge."""
+
+    def point(along, height):
+        return center.add(along_axis * along).add(up_axis * height)
+
+    inner_along = half_width - radius
+    inner_height = half_height - radius
+    corner_centers = (  # counterclockwise from the bottom one along +along_axis
+        (inner_along, -inner_height),
+        (inner_along, inner_height),
+        (-inner_along, inner_height),
+        (-inner_along, -inner_height),
+    )
+    arcs = []
+    for index, (corner_along, corner_height) in enumerate(corner_centers):
+        start = -90.0 + 90.0 * index
+        arcs.append([
+            point(
+                corner_along + radius * math.cos(math.radians(start + step)),
+                corner_height + radius * math.sin(math.radians(start + step)),
+            )
+            for step in (0.0, 45.0, 90.0)
+        ])
+    edges = []
+    for index, arc in enumerate(arcs):
+        edges.append(Part.Arc(*arc).toShape())
+        edges.append(Part.LineSegment(arc[2], arcs[(index + 1) % 4][0]).toShape())
+    return Part.Wire(edges)
+
+
+def rounded_rectangle_area(half_width, half_height, radius):
+    return 4.0 * half_width * half_height - (4.0 - math.pi) * radius**2
+
+
+def rounded_rectangle_perimeter(half_width, half_height, radius):
+    return 4.0 * (half_width + half_height) - 2.0 * (4.0 - math.pi) * radius
+
+
+def chamfer_volume(perimeter, size):
+    """The volume a 45 degree chamfer of `size` takes out of a face
+    around a rounded rectangle opening of the given perimeter: the
+    opening grows by `size` minus the depth into the face."""
+    return perimeter * size**2 / 2.0 + math.pi * size**3 / 3.0
+
+
+def cut_rounded_wall_window(
+    tray, outline_wire, up, center_on_edge, direction, width, bottom, top,
+    corner_radius, chamfer, gap, wall, ledge_width, label,
+):
+    """Open a window with rounded corners through the wall and the
+    ledge behind it: `width` along the wall centered on
+    `center_on_edge`, from `bottom` to `top` above the floor, its
+    corners rounded with `corner_radius`, and both faces of the wall
+    chamfered by `chamfer` at 45 degrees around it. The profile lies in
+    the wall's plane and is extruded across the wall. Each chamfer is a
+    ruled loft from the profile grown by the chamfer at the face (and
+    on past it a little, so no cutter face lies in the wall's) to the
+    profile itself at the chamfer's depth."""
+    half_width = width / 2.0
+    half_height = (top - bottom) / 2.0
+    if not 0.0 < corner_radius < min(half_width, half_height):
+        raise SystemExit(
+            f"error: the {label} window's corner radius {corner_radius} mm "
+            f"does not fit its {width:.2f} x {top - bottom:.2f} mm"
+        )
+    if not 0.0 < chamfer < wall / 2.0:
+        raise SystemExit(
+            f"error: the {label} window's chamfer {chamfer} mm must be under "
+            f"half the {wall} mm wall"
+        )
+    outward = wall_outward(outline_wire, center_on_edge, direction, up)
+    middle = center_on_edge.add(up * ((bottom + top) / 2.0))
+    ledge_reach = max(ledge_width - gap, 0.0)  # how far the ledge reaches under the board
+    overshoot = 0.05  # the chamfer cutters run on past the wall's faces
+
+    def profile(across, grow):
+        return rounded_rectangle_wire(
+            middle.add(outward * across), direction, up,
+            half_width + grow, half_height + grow, corner_radius + grow,
+        )
+
+    inner = -(ledge_reach + 0.5)  # start inside the cavity, past the ledge
+    outer = gap + wall + 0.5
+    through = Part.Face(profile(inner, 0.0)).extrude(outward * (outer - inner))
+    chamfers = [
+        Part.makeLoft(
+            [profile(face + outward_sign * overshoot, chamfer + overshoot),
+             profile(face - outward_sign * chamfer, 0.0)],
+            True,
+            True,
+        )
+        for face, outward_sign in ((gap + wall, 1.0), (gap, -1.0))
+    ]
+    cutter = through.multiFuse(chamfers)
+    if not cutter.isValid() or len(cutter.Solids) != 1:
+        raise SystemExit(f"error: the {label} window's cutter is not one solid")
+    volume_before = tray.Volume
+    result = tray.cut(cutter)
+    if not result.isValid() or len(result.Solids) != 1:
+        raise SystemExit(f"error: cutting the {label} window broke the solid")
+    removed_volume = volume_before - result.Volume
+    area = rounded_rectangle_area(half_width, half_height, corner_radius)
+    perimeter = rounded_rectangle_perimeter(half_width, half_height, corner_radius)
+    expected_volume = area * wall + 2.0 * chamfer_volume(perimeter, chamfer)
+    if ledge_width > 0:
+        # The ledge in front of the wall goes too, as far as the window
+        # and the inner chamfer's overshoot reach into it.
+        expected_volume += (
+            area * ledge_width
+            + chamfer_volume(perimeter, chamfer + overshoot)
+            - chamfer_volume(perimeter, chamfer)
+        )
+    if abs(removed_volume - expected_volume) > 0.002 * expected_volume + 0.01:
+        raise SystemExit(
+            f"error: the {label} window removed {removed_volume:.2f} mm3, "
+            f"expected {expected_volume:.2f} mm3; geometry is off"
+        )
+    validate_rounded_window(
+        result.Solids[0], middle, direction, outward, up, half_width,
+        half_height, corner_radius, chamfer, gap, wall, ledge_reach, label,
+    )
+    return result
+
+
+def validate_rounded_window(
+    solid, middle, direction, outward, up, half_width, half_height,
+    corner_radius, chamfer, gap, wall, ledge_reach, label,
+):
+    """Probe a window cut by cut_rounded_wall_window around its center
+    `middle`: open inside its edges and solid just outside them at mid
+    wall, the chamfers open just outside the straight edges near both
+    faces but no wider than the chamfer, and the corners rounded."""
+
+    def is_solid(along, across, height):
+        point = middle.add(direction * along).add(outward * across).add(up * height)
+        return solid.isInside(point, 1e-6, True)
+
+    mid_wall = gap + wall / 2.0
+    near_faces = (gap + chamfer / 4.0, gap + wall - chamfer / 4.0)
+    if is_solid(0.0, mid_wall, 0.0):
+        raise SystemExit(f"error: the {label} window did not open the wall")
+    if ledge_reach > 0 and is_solid(0.0, -ledge_reach / 2.0, 0.0):
+        raise SystemExit(f"error: the {label} window left the ledge in place")
+    for along_sign, height_sign in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+
+        def beyond_edge(distance):
+            return (
+                along_sign * (half_width + distance),
+                height_sign * (half_height + distance),
+            )
+
+        along, height = beyond_edge(-0.05)
+        if is_solid(along, mid_wall, height):
+            raise SystemExit(f"error: the {label} window is smaller than intended")
+        along, height = beyond_edge(0.05)
+        if not is_solid(along, mid_wall, height):
+            raise SystemExit(f"error: the {label} window is larger than intended")
+        if any(is_solid(along, across, height) for across in near_faces):
+            raise SystemExit(f"error: the {label} window's chamfer is missing")
+        along, height = beyond_edge(chamfer + 0.1)
+        if not all(is_solid(along, across, height) for across in near_faces):
+            raise SystemExit(f"error: the {label} window's chamfer is too wide")
+    for along_sign in (1, -1):
+        for height_sign in (1, -1):
+            corner_along = along_sign * (half_width - corner_radius)
+            corner_height = height_sign * (half_height - corner_radius)
+            for fraction, want_solid in ((0.6, False), (0.9, True)):
+                # Along the corner's diagonal: 0.85 radii out is inside
+                # the rounded corner, 1.27 is outside it but still
+                # inside the bounding rectangle.
+                offset = fraction * corner_radius
+                if is_solid(
+                    corner_along + along_sign * offset,
+                    mid_wall,
+                    corner_height + height_sign * offset,
+                ) != want_solid:
+                    raise SystemExit(
+                        f"error: the {label} window's corners are not rounded "
+                        f"with {corner_radius} mm"
+                    )
+
+
+def left_usb_window_center(usb_window_center, usb_direction, switch_window_center):
+    """The left half's USB window center on the outline: the right
+    half's one moved LEFT_USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM along
+    the wall, away from the power switch window."""
+    toward_switch = usb_direction.dot(switch_window_center.sub(usb_window_center))
+    if abs(toward_switch) < 1.0:
+        raise SystemExit(
+            "error: the power switch window is not off to either side of the "
+            "USB window, cannot tell which way is away from it"
+        )
+    switch_side = 1.0 if toward_switch > 0 else -1.0
+    return usb_window_center.add(
+        usb_direction * (-switch_side * LEFT_USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM)
+    )
+
+
 def cut_ledge_notch(
     tray, outline_wire, up, center_on_edge, direction, width, depth, ledge_top,
     gap, wall, ledge_width, label,
@@ -1052,20 +1290,52 @@ def main():
     usb_window_middle = board_underside - USB_RECEPTACLE_CENTER_BELOW_BOARD_MM
     usb_window_bottom = usb_window_middle - USB_WINDOW_HEIGHT_MM / 2.0
     usb_window_top = usb_window_middle + USB_WINDOW_HEIGHT_MM / 2.0
-    tray = cut_wall_window(
-        tray,
-        resting_face.OuterWire,
-        up,
-        usb_window_center,
-        usb_direction,
-        USB_WINDOW_WIDTH_MM,
-        usb_window_bottom,
-        usb_window_top,
-        arguments.gap,
-        arguments.wall,
-        arguments.ledge_width,
-        "usb",
-    )
+    usb_window_width = USB_WINDOW_WIDTH_MM
+    usb_window_shape = ""
+    if arguments.right:
+        tray = cut_wall_window(
+            tray,
+            resting_face.OuterWire,
+            up,
+            usb_window_center,
+            usb_direction,
+            USB_WINDOW_WIDTH_MM,
+            usb_window_bottom,
+            usb_window_top,
+            arguments.gap,
+            arguments.wall,
+            arguments.ledge_width,
+            "usb",
+        )
+    else:
+        usb_window_center = left_usb_window_center(
+            usb_window_center, usb_direction, switch_window_center
+        )
+        usb_window_width = LEFT_USB_WINDOW_WIDTH_MM
+        usb_window_middle = board_underside - LEFT_USB_WINDOW_CENTER_BELOW_BOARD_MM
+        usb_window_bottom = usb_window_middle - LEFT_USB_WINDOW_HEIGHT_MM / 2.0
+        usb_window_top = usb_window_middle + LEFT_USB_WINDOW_HEIGHT_MM / 2.0
+        tray = cut_rounded_wall_window(
+            tray,
+            resting_face.OuterWire,
+            up,
+            usb_window_center,
+            usb_direction,
+            usb_window_width,
+            usb_window_bottom,
+            usb_window_top,
+            LEFT_USB_WINDOW_CORNER_RADIUS_MM,
+            LEFT_USB_WINDOW_CHAMFER_MM,
+            arguments.gap,
+            arguments.wall,
+            arguments.ledge_width,
+            "usb",
+        )
+        usb_window_shape = (
+            f", corners rounded {LEFT_USB_WINDOW_CORNER_RADIUS_MM} mm, a "
+            f"{LEFT_USB_WINDOW_CHAMFER_MM} mm x 45 degree chamfer on both "
+            "faces of the wall,"
+        )
     ledge_notches = []
     ledge_reliefs = []
     if arguments.ledge_width > arguments.gap:
@@ -1155,8 +1425,9 @@ def main():
           f"face around that window for {POWER_SWITCH_NAME}'s body, "
           f"{POWER_SWITCH_POCKET_SKIN_MM} mm of wall left outside it, "
           f"{switch_pocket_volume:.1f} mm3")
-    print(f"window:     {USB_WINDOW_WIDTH_MM} x {USB_WINDOW_HEIGHT_MM} mm through "
-          f"the wall for the USB-C plug at the wall segment nearest "
+    print(f"window:     {usb_window_width:.1f} x {usb_window_top - usb_window_bottom:.1f} "
+          f"mm through the wall for the USB-C plug{usb_window_shape} at the wall "
+          f"segment nearest "
           f"{MCU_NAME}'s connector end ({usb_end.x:.2f}, {usb_end.y:.2f}), "
           f"centered near ({usb_window_center.x:.2f}, {usb_window_center.y:.2f}), "
           f"{usb_window_bottom:.2f} to {usb_window_top:.2f} mm above the floor")
