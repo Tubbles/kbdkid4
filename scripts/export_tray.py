@@ -71,10 +71,14 @@ its USB connector (MCU_NAME) are mounted on the board's underside,
 the switch lever reaching through the wall and the connector opening
 onto it, so the wall gets a window cut through it below the board
 over the outline segment nearest each of them: one sized for the
-switch body, one for a USB-C plug. The ledge behind the wall is cut
-away over the same stretch. Both are located via the board sources,
-since the STEP carries no component bodies; their reach below the
-board comes from the package 3D models (see the constants).
+switch lever's travel, one for a USB-C plug. The ledge behind the wall
+is cut away over the same stretch. The switch and the microcontroller
+are located via the board sources, since the STEP carries no component
+bodies; their reach below the board comes from the package 3D models
+(see the constants). The switch body is wider than its window and
+comes close to the wall, so around that window the wall's inner face
+gets a pocket over the body's width, leaving a thin outer skin. The
+nano behind the USB window gets ledge reliefs (below).
 
 The hotswap sockets hang under the board too, and in the switch
 column along the west edge each socket ends in a narrow tab that
@@ -139,15 +143,26 @@ DEFAULT_LEDGE_WIDTH_MM = 1.0  # PCB support ledge from the cavity wall (0 disabl
 # reaching through the wall, so the wall gets a window over the
 # outline segment nearest the switch, from just below the switch body
 # to just above the board's underside. The switch position comes from
-# the board sources (the STEP carries no component bodies); the body's
-# reach below the board was measured on LibrePCB's STEP export of the
-# populated board, which places the package's 3D model: body 7.7 mm
-# wide, hanging 1.4 mm below the board, lever to 1.3 mm past the
-# outline.
+# the board sources (the STEP carries no component bodies); its shape
+# was measured on the package's 3D model as LibrePCB places it: body
+# 7.7 mm wide, hanging 1.4 mm below the board and reaching to 0.09 mm
+# inside the outline, lever 1.3 mm wide reaching 1.3 mm past the
+# outline. On the assembled first print the body's outer face measured
+# 1.13 mm from the tray's outer face, so 0.07 mm past the board edge
+# and 0.33 mm from the wall's inner face. Only the lever passes through
+# the wall, so the window is sized for its travel: the model shows it
+# 0.1 to 1.4 mm off center at one end, so a sweep of 1.4 mm either
+# side, which a 5.3 mm window clears by 1.25 mm per side. The body
+# gets a pocket in the wall's inner face instead, over its width plus
+# WINDOW_MARGIN_MM per side and the window's height band, leaving
+# POWER_SWITCH_POCKET_SKIN_MM of the wall outside it (one nozzle
+# width); the pocket also clears the ledge behind it.
 POWER_SWITCH_NAME = "S1"
-POWER_SWITCH_WINDOW_WIDTH_MM = 9.3  # along the wall, clears the switch body
+POWER_SWITCH_WINDOW_WIDTH_MM = 5.3  # through the wall, clears the lever's travel
+POWER_SWITCH_BODY_WIDTH_MM = 7.7
 POWER_SWITCH_BODY_BELOW_BOARD_MM = 1.4
-WINDOW_MARGIN_MM = 0.5  # switch window edges beyond the body, below and above
+POWER_SWITCH_POCKET_SKIN_MM = 0.4
+WINDOW_MARGIN_MM = 0.5  # switch window and pocket edges beyond the body: below, above and per side
 
 # The nice!nano hangs under the board with its USB-C receptacle
 # opening onto the board outline, so the wall gets a second window
@@ -663,6 +678,70 @@ def cut_ledge_notch(
     return result
 
 
+def cut_wall_pocket(
+    tray, outline_wire, up, center_on_edge, direction, width, bottom, top,
+    gap, wall, ledge_width, skin, label,
+):
+    """Cut a pocket into the wall's inner face and through the ledge
+    behind it: `width` along the wall centered on `center_on_edge`, from
+    `bottom` to `top` above the floor, leaving `skin` of the wall on the
+    outside."""
+    if top <= bottom:
+        raise SystemExit(f"error: the {label} pocket has no height")
+    if not 0.0 < skin < wall:
+        raise SystemExit(
+            f"error: the {label} pocket skin {skin} mm must be thinner than "
+            f"the {wall} mm wall"
+        )
+    outward = wall_outward(outline_wire, center_on_edge, direction, up)
+    half_width = width / 2.0
+    height = top - bottom
+    ledge_reach = max(ledge_width - gap, 0.0)  # how far the ledge reaches under the board
+    inner = -(ledge_reach + 0.5)  # start inside the cavity, past the ledge
+    outer = gap + wall - skin
+    base = center_on_edge.add(up * bottom)
+    corners = [
+        base.add(direction * -half_width).add(outward * inner),
+        base.add(direction * half_width).add(outward * inner),
+        base.add(direction * half_width).add(outward * outer),
+        base.add(direction * -half_width).add(outward * outer),
+    ]
+    cutter = Part.Face(Part.makePolygon(corners + [corners[0]])).extrude(
+        up * height
+    )
+    removable = tray.common(cutter).Volume
+    result = tray.cut(cutter)
+    if not result.isValid() or len(result.Solids) != 1:
+        raise SystemExit(f"error: cutting the {label} pocket broke the solid")
+    removed_volume = tray.Volume - result.Volume
+    if abs(removed_volume - removable) > 0.02 * removable + 1e-3:
+        raise SystemExit(
+            f"error: the {label} pocket removed {removed_volume:.2f} mm3, "
+            f"expected {removable:.2f} mm3; geometry is off"
+        )
+    solid = result.Solids[0]
+    middle = (bottom + top) / 2.0
+
+    def probe(along, across, z):
+        return center_on_edge.add(direction * along).add(outward * across).add(up * z)
+
+    pocket_middle = gap + (wall - skin) / 2.0
+    skin_middle = gap + wall - skin / 2.0
+    for along in (-(half_width - 0.3), half_width - 0.3):
+        if solid.isInside(probe(along, pocket_middle, middle), 1e-6, True):
+            raise SystemExit(f"error: the {label} pocket did not open the wall's inner face")
+        if not solid.isInside(probe(along, skin_middle, middle), 1e-6, True):
+            raise SystemExit(f"error: the {label} pocket cut through the wall's skin")
+        if ledge_reach > 0 and solid.isInside(
+            probe(along, -ledge_reach / 2.0, middle), 1e-6, True
+        ):
+            raise SystemExit(f"error: the {label} pocket left the ledge in place")
+    for along in (-(half_width + 0.3), half_width + 0.3):
+        if not solid.isInside(probe(along, pocket_middle, middle), 1e-6, True):
+            raise SystemExit(f"error: the wall beside the {label} pocket is missing")
+    return result, removed_volume
+
+
 def turn_for_printing(tray, up, floor, depth):
     """Turn a tray built opening-down through 180 degrees about the X
     axis so it prints opening-up, and put its floor's underside at
@@ -943,6 +1022,22 @@ def main():
         arguments.ledge_width,
         "switch",
     )
+    switch_pocket_width = POWER_SWITCH_BODY_WIDTH_MM + 2.0 * WINDOW_MARGIN_MM
+    tray, switch_pocket_volume = cut_wall_pocket(
+        tray,
+        resting_face.OuterWire,
+        up,
+        switch_window_center,
+        switch_direction,
+        switch_pocket_width,
+        switch_window_bottom,
+        switch_window_top,
+        arguments.gap,
+        arguments.wall,
+        arguments.ledge_width,
+        POWER_SWITCH_POCKET_SKIN_MM,
+        "switch body",
+    )
     mcu_by_name = component_placements(re.compile(re.escape(MCU_NAME)))
     if MCU_NAME not in mcu_by_name:
         raise SystemExit(
@@ -1055,6 +1150,11 @@ def main():
           f"({switch_window_center.x:.2f}, {switch_window_center.y:.2f}), "
           f"{switch_window_bottom:.2f} to {switch_window_top:.2f} mm above the "
           f"floor (board underside at {board_underside:.2f} mm)")
+    print(f"pocket:     {switch_pocket_width:.1f} x "
+          f"{switch_window_top - switch_window_bottom:.1f} mm into the wall's inner "
+          f"face around that window for {POWER_SWITCH_NAME}'s body, "
+          f"{POWER_SWITCH_POCKET_SKIN_MM} mm of wall left outside it, "
+          f"{switch_pocket_volume:.1f} mm3")
     print(f"window:     {USB_WINDOW_WIDTH_MM} x {USB_WINDOW_HEIGHT_MM} mm through "
           f"the wall for the USB-C plug at the wall segment nearest "
           f"{MCU_NAME}'s connector end ({usb_end.x:.2f}, {usb_end.y:.2f}), "
