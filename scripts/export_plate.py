@@ -20,7 +20,9 @@ through-hole parts soldered on the board's underside (the nice!nano,
 the battery connector) have their leads sticking up there, so the
 extension's underside gets a conical recess at every lead drill found
 in the STEP, stopping PLATE_SKIN_MM short of the top face so nothing
-shows through. The reset pushbutton gets a plain hole.
+shows through. The reset switch gets a pin hole through the plate, to
+press it with a SIM ejector pin, and a pocket in the underside for its
+body and pads.
 
 The word "covered" makes the variant for a half without the key at
 COVERED_SWITCH_NAME (the bottom row's third key, hard to reach): its
@@ -36,13 +38,13 @@ The STL is written upside down, top face on z = 0 and the recesses
 opening upward, so it prints as is without supports.
 
 Finally the whole pattern of switch cutouts, screw holes, lead
-recesses, the reset hole and any diode pit is shifted along +X by
-pattern_shift (default DEFAULT_PATTERN_SHIFT_MM) while the outline
-stays exactly where it is: the first printed plates sat right in the
-tray but their holes drifted off the board's features toward the
-nice!nano side, and a plate printed with a 0.5 mm shift came out
-offset about as far the other way, so 0.25 mm is the current try. The
-cause of the drift is still open (SUGGESTIONS.md).
+recesses, the reset hole and pocket, and any diode pit is shifted
+along +X by pattern_shift (default DEFAULT_PATTERN_SHIFT_MM) while
+the outline stays exactly where it is: the first printed plates sat
+right in the tray but their holes drifted off the board's features
+toward the nice!nano side, and a plate printed with a 0.5 mm shift
+came out offset about as far the other way, so 0.25 mm is the current
+try. The cause of the drift is still open (SUGGESTIONS.md).
 
 Last, side_shave (default DEFAULT_SIDE_SHAVE_MM) comes off the
 plate's west and east edges: the printed plate is a snug fit
@@ -127,14 +129,31 @@ MCU_TAB_EXTENSION_MM = 2.5
 # mounting drill); each gets a frustum recess from the underside,
 # LEAD_CONE_BASE_DIAMETER_MM wide at the underside narrowing to
 # LEAD_CONE_TOP_DIAMETER_MM, reaching to PLATE_SKIN_MM below the top
-# face. The reset pushbutton gets a plain through hole.
+# face.
 CORNER_OVERHANG_MM = 0.35
 LEAD_DRILL_MAX_DIAMETER_MM = 1.5
 LEAD_CONE_BASE_DIAMETER_MM = 2.5
 LEAD_CONE_TOP_DIAMETER_MM = 1.0
 PLATE_SKIN_MM = 0.2
+
+# The reset switch in that corner is an E-Switch TL3315 style micro
+# tactile switch, 4.5 x 4.5 x 0.55 mm, pressed with a SIM ejector pin
+# through a RESET_PIN_HOLE_DIAMETER_MM hole centered on it. On its
+# footprint (ESWITCH_TL3315NF100Q) the pads' copper spans the given
+# half extents along the footprint's x and y, beyond the body's 2.25
+# mm. The plate's underside gets a pocket over both, aligned with the
+# footprint, RESET_POCKET_MARGIN_MM wider per side and
+# RESET_POCKET_DEPTH_MM deep (the switch plus solder and clearance),
+# so the rest of the plate's thickness guides the pin. The plate rests
+# on the board, so the depth counts from its underside.
 RESET_SWITCH_NAME = "S3"
-RESET_SWITCH_HOLE_DIAMETER_MM = 10.0
+# The board level switches (reset and power), among which the right
+# half's reset switch is found: the flipped one at S3's position.
+BOARD_SWITCH_NAME_PATTERN = re.compile(r"S[0-9]")
+RESET_PIN_HOLE_DIAMETER_MM = 1.5
+RESET_FOOTPRINT_HALF_EXTENTS_MM = (2.575, 2.30)  # pads and body, along footprint x and y
+RESET_POCKET_MARGIN_MM = 0.5
+RESET_POCKET_DEPTH_MM = 1.0
 
 # The covered variant (the word "covered"): one bottom row key is hard
 # to reach and left out, so its switch cutout is filled in solid. Its
@@ -507,33 +526,108 @@ def cut_lead_cones(plate, lead_centers):
     return cut, height
 
 
-def cut_reset_hole(plate):
-    """Cut a plain through hole for the reset pushbutton. Returns
-    (plate, center)."""
-    reset_by_name = component_positions(re.compile(re.escape(RESET_SWITCH_NAME)))
-    if RESET_SWITCH_NAME not in reset_by_name:
-        raise SystemExit(
-            f"error: reset switch '{RESET_SWITCH_NAME}' not found in the board sources"
-        )
-    center = reset_by_name[RESET_SWITCH_NAME]
+def reset_pocket_cone_clearance(switch, half_x, half_y, lead_centers):
+    """The gap between the reset pocket and the nearest lead cone at the
+    plate's underside, where both are widest. An overlap is an error.
+    The pocket is a rectangle with the given half extents along the
+    switch footprint's axes."""
+    base_radius = LEAD_CONE_BASE_DIAMETER_MM / 2.0
+    axis_x = footprint_x_axis(switch)
+    axis_y = App.Vector(-axis_x.y, axis_x.x, 0.0)
+    clearance = None
+    for lead in lead_centers:
+        offset = lead.sub(switch.position)
+        outside_x = max(abs(offset.dot(axis_x)) - half_x, 0.0)
+        outside_y = max(abs(offset.dot(axis_y)) - half_y, 0.0)
+        gap = math.hypot(outside_x, outside_y) - base_radius
+        if gap <= 0.0:
+            raise SystemExit(
+                f"error: the reset pocket overlaps the lead cone at "
+                f"({lead.x:.2f}, {lead.y:.2f})"
+            )
+        if clearance is None or gap < clearance:
+            clearance = gap
+    return clearance
+
+
+def cut_reset_hole(plate, lead_centers):
+    """Cut a pin hole through the plate, centered on the reset switch,
+    and a pocket for the switch in the plate's underside, aligned with
+    its footprint and clear of the lead cones. Returns (plate, center,
+    pocket length, pocket width, cone clearance)."""
+    switch = placement_by_name(RESET_SWITCH_NAME)
+    half_x, half_y = (
+        extent + RESET_POCKET_MARGIN_MM for extent in RESET_FOOTPRINT_HALF_EXTENTS_MM
+    )
+    clearance = reset_pocket_cone_clearance(switch, half_x, half_y, lead_centers)
     box = plate.BoundBox
-    radius = RESET_SWITCH_HOLE_DIAMETER_MM / 2.0
+    depth = RESET_POCKET_DEPTH_MM
+    if depth >= box.ZLength:
+        raise SystemExit("error: the reset pocket is as deep as the plate is thick")
+    radius = RESET_PIN_HOLE_DIAMETER_MM / 2.0
+    center = switch.position
+    extra = 1.0  # the cutters continue past the plate's faces for a clean cut
+    pocket = Part.makeBox(
+        2.0 * half_x,
+        2.0 * half_y,
+        depth + extra,
+        App.Vector(-half_x, -half_y, box.ZMin - extra),
+    )
+    pocket.rotate(App.Vector(0, 0, 0), App.Vector(0, 0, 1), switch.rotation_degrees)
+    pocket.translate(center)
     hole = Part.makeCylinder(
         radius,
-        box.ZLength + 2.0,
-        App.Vector(center.x, center.y, box.ZMin - 1.0),
+        box.ZLength + 2.0 * extra,
+        App.Vector(center.x, center.y, box.ZMin - extra),
         App.Vector(0, 0, 1),
     )
     volume_before = plate.Volume
-    cut = plate.cut(hole)
+    cut = plate.cut(pocket.fuse(hole))
     removed_volume = volume_before - cut.Volume
-    expected_volume = math.pi * radius**2 * box.ZLength
+    expected_volume = (
+        4.0 * half_x * half_y * depth + math.pi * radius**2 * (box.ZLength - depth)
+    )
     if abs(removed_volume - expected_volume) > 0.01 * expected_volume:
         raise SystemExit(
-            f"error: the reset hole removed {removed_volume:.2f} mm3, expected "
-            f"{expected_volume:.2f} mm3; it is not fully inside plate material"
+            f"error: the reset pocket and pin hole removed {removed_volume:.2f} mm3, "
+            f"expected {expected_volume:.2f} mm3; they are not fully inside plate "
+            "material"
         )
-    return cut, center
+    validate_reset_cut(cut, switch, half_x, half_y, depth, radius)
+    return cut, center, 2.0 * half_x, 2.0 * half_y, clearance
+
+
+def validate_reset_cut(plate, switch, half_x, half_y, depth, radius):
+    """Probe the reset pocket and pin hole in footprint coordinates: the
+    pocket open near its corners up to its depth and no further, plate
+    just outside its sides, the hole open through the rest of the
+    plate and no wider."""
+    box = plate.BoundBox
+
+    def is_solid(local_x, local_y, z):
+        point = switch.map_point(App.Vector(local_x, local_y, 0.0))
+        return inside_any(plate, App.Vector(point.x, point.y, z))
+
+    above_pocket = box.ZMin + depth + 0.1
+    for sign_x, sign_y in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+        local_x = sign_x * (half_x - 0.2)
+        local_y = sign_y * (half_y - 0.2)
+        if is_solid(local_x, local_y, box.ZMin + 0.1) or is_solid(
+            local_x, local_y, box.ZMin + depth - 0.1
+        ):
+            raise SystemExit("error: the reset pocket did not open the underside")
+        if not is_solid(local_x, local_y, above_pocket):
+            raise SystemExit("error: the plate above the reset pocket is missing")
+    for local_x, local_y in (
+        (half_x + 0.2, 0.0), (-(half_x + 0.2), 0.0),
+        (0.0, half_y + 0.2), (0.0, -(half_y + 0.2)),
+    ):
+        if not is_solid(local_x, local_y, box.ZMin + 0.1):
+            raise SystemExit("error: the reset pocket is larger than intended")
+    if is_solid(0.0, 0.0, above_pocket) or is_solid(0.0, 0.0, box.ZMax - 0.1):
+        raise SystemExit("error: the reset pin hole does not reach the top face")
+    if not is_solid(radius + 0.1, 0.0, box.ZMax - 0.1):
+        raise SystemExit("error: the reset pin hole is wider than intended")
 
 
 def placement_by_name(name):
@@ -562,7 +656,7 @@ def flipped_counterpart(name_pattern, placement, kind):
         raise SystemExit(
             f"error: expected one flipped {kind} for the right half at "
             f"({placement.position.x:.3f}, {placement.position.y:.3f}), "
-            f"found {len(matches)}; the mirrored cover would not fit"
+            f"found {len(matches)}; the mirrored plate would not fit there"
         )
     return matches[0]
 
@@ -597,6 +691,28 @@ def right_half_counterparts(switch, diode):
             f"{diode.rotation_degrees:.1f} degrees); the mirrored pit would not fit"
         )
     return [switch_name, diode_name]
+
+
+def right_half_reset_switch(switch):
+    """Name of the right half's reset switch: the flipped board level
+    switch at exactly the left one's position, its footprint lying
+    along the same board axis. The right plate is the left one
+    mirrored, so without it the reset pocket and pin hole would not
+    fit that half. The pocket is symmetric, so the footprint may point
+    either way along that axis."""
+    name, counterpart = flipped_counterpart(
+        BOARD_SWITCH_NAME_PATTERN, switch, "reset switch"
+    )
+    sine = footprint_x_axis(switch).cross(footprint_x_axis(counterpart)).z
+    if abs(sine) > 1e-6:
+        raise SystemExit(
+            f"error: the right half's {name} does not lie along the same board "
+            f"axis as {RESET_SWITCH_NAME} (rotation "
+            f"{counterpart.rotation_degrees:.1f} against "
+            f"{switch.rotation_degrees:.1f} degrees); the mirrored reset pocket "
+            "would not fit"
+        )
+    return name
 
 
 def solid_bottom_outline(solid):
@@ -744,6 +860,30 @@ def turn_upside_down(plate, recess_centers):
     return plate
 
 
+def check_turned_reset_pocket(plate, reset_center, depth):
+    """After turn_upside_down: the reset pocket around `reset_center`
+    (shifted and mirrored along with the pattern) opens upward to
+    `depth`, and the pin hole runs on down to the bed. The turn mapped
+    y to 2 * center y - y about the plate's center, which it left
+    where it was. The probes sit off the center by more than the hole's
+    radius and less than the pocket's half width, so they land in the
+    pocket beside the hole whatever the footprint's rotation."""
+    box = plate.BoundBox
+    turned = App.Vector(reset_center.x, 2.0 * box.Center.y - reset_center.y, 0.0)
+    hole_radius = RESET_PIN_HOLE_DIAMETER_MM / 2.0
+    pocket_half_width = min(RESET_FOOTPRINT_HALF_EXTENTS_MM) + RESET_POCKET_MARGIN_MM
+    distance = (hole_radius + pocket_half_width) / 2.0
+    for offset_x, offset_y in ((distance, 0.0), (-distance, 0.0), (0.0, distance), (0.0, -distance)):
+        point = turned.add(App.Vector(offset_x, offset_y, 0.0))
+        if inside_any(plate, point.add(App.Vector(0, 0, box.ZMax - depth + 0.1))):
+            raise SystemExit("error: after flipping, the reset pocket does not open at the top")
+        if not inside_any(plate, point.add(App.Vector(0, 0, box.ZMax - depth - 0.1))):
+            raise SystemExit("error: after flipping, the plate under the reset pocket is missing")
+    for z in (0.1, (box.ZMax - depth) / 2.0):
+        if inside_any(plate, turned.add(App.Vector(0, 0, z))):
+            raise SystemExit("error: after flipping, the reset pin hole does not reach the bed")
+
+
 def shift_pattern(plate, shift):
     """Move every cutout, hole and recess by `shift` along +X while the
     outline stays where it is: translate the plate, clip it back to its
@@ -839,8 +979,8 @@ def mirror_for_right_half(plate, recess_centers):
     """Mirror the plate across the YZ plane through its center: the
     right half's plate, since the board is reversible and that half
     is the left one turned over, cells, screw holes, lead recesses,
-    reset hole and any diode pit included. Returns (plate, recess
-    centers) both mirrored.
+    reset hole and pocket, and any diode pit included. Returns (plate,
+    recess centers) both mirrored.
 
     This has to run before turn_upside_down: Shape.mirror works on
     the geometry and drops a placement set by rotate or translate
@@ -928,7 +1068,11 @@ def main():
     if not lead_centers:
         raise SystemExit("error: no lead drills found in the corner extension")
     plate, cone_height = cut_lead_cones(plate, lead_centers)
-    plate, reset_center = cut_reset_hole(plate)
+    if arguments.right:
+        right_reset_name = right_half_reset_switch(placement_by_name(RESET_SWITCH_NAME))
+    plate, reset_center, pocket_length, pocket_width, cone_clearance = cut_reset_hole(
+        plate, lead_centers
+    )
     pit_centers = []
     if arguments.covered:
         covered_switch = placement_by_name(COVERED_SWITCH_NAME)
@@ -947,10 +1091,17 @@ def main():
         App.Vector(recess.x + arguments.pattern_shift, recess.y, recess.z)
         for recess in lead_centers + pit_centers
     ]
+    # The reset pocket travels along too but gets its own check after
+    # the turn: the recesses' skin probe would land in its pin hole.
+    reset_probe = App.Vector(
+        reset_center.x + arguments.pattern_shift, reset_center.y, reset_center.z
+    )
     plate = shave_sides(plate, arguments.side_shave)
     if arguments.right:
-        plate, recess_centers = mirror_for_right_half(plate, recess_centers)
+        plate, mirrored = mirror_for_right_half(plate, recess_centers + [reset_probe])
+        recess_centers, reset_probe = mirrored[:-1], mirrored[-1]
     plate = turn_upside_down(plate, recess_centers)
+    check_turned_reset_pocket(plate, reset_probe, RESET_POCKET_DEPTH_MM)
     mesh = export_stl(plate, arguments.stl_file)
 
     print(f"board:      {board_description}, {len(hole_centers)} mounting drills")
@@ -972,8 +1123,15 @@ def main():
           f"{LEAD_CONE_BASE_DIAMETER_MM} mm at the underside narrowing to "
           f"{LEAD_CONE_TOP_DIAMETER_MM} mm, {cone_height:.2f} mm tall, "
           f"{PLATE_SKIN_MM} mm of plate left above them")
-    print(f"reset:      {RESET_SWITCH_HOLE_DIAMETER_MM} mm hole for "
-          f"{RESET_SWITCH_NAME} at ({reset_center.x:.2f}, {reset_center.y:.2f})")
+    reset_note = ""
+    if arguments.right:
+        reset_note = f", where the right half has {right_reset_name}"
+    print(f"reset:      {RESET_PIN_HOLE_DIAMETER_MM} mm pin hole for "
+          f"{RESET_SWITCH_NAME} at ({reset_center.x:.2f}, {reset_center.y:.2f}), "
+          f"{pocket_length:.2f} x {pocket_width:.2f} mm pocket "
+          f"{RESET_POCKET_DEPTH_MM:.2f} mm deep in the underside for the switch, "
+          f"{box.ZLength - RESET_POCKET_DEPTH_MM:.2f} mm of plate left to guide the "
+          f"pin, {cone_clearance:.2f} mm clear of the nearest lead cone{reset_note}")
     if arguments.covered:
         switch = covered_switch.position
         diode = covered_diode.position
