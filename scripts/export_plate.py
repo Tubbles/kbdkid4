@@ -20,9 +20,10 @@ through-hole parts soldered on the board's underside (the nice!nano,
 the battery connector) have their leads sticking up there, so the
 extension's underside gets a conical recess at every lead drill found
 in the STEP, stopping PLATE_SKIN_MM short of the top face so nothing
-shows through. The reset switch gets a pin hole through the plate, to
-press it with a SIM ejector pin, and a pocket in the underside for its
-body and pads.
+shows through. The nice!view display's header is not fitted for now,
+so its drills get none. The reset switch gets a pin hole through the
+plate, to press it with a SIM ejector pin, and a pocket in the
+underside for its body and pads.
 
 The word "covered" makes the variant for a half without the key at
 COVERED_SWITCH_NAME (the bottom row's third key, hard to reach): its
@@ -132,16 +133,24 @@ MCU_TAB_EXTENSION_MM = 2.5
 # flush with the cells beside it rather than following the outline
 # there. Every drill up to LEAD_DRILL_MAX_DIAMETER_MM in that corner is
 # a through-hole lead (the board's other drills there are the 2.4 mm
-# mounting drill); each gets a frustum recess from the underside,
-# LEAD_CONE_BASE_DIAMETER_MM wide at the underside narrowing to
-# LEAD_CONE_TOP_DIAMETER_MM, reaching to PLATE_SKIN_MM below the top
-# face: two 0.2 mm print layers, since the recesses showed through a
-# single one.
+# mounting drill); each but the nice!view's (below) gets a frustum
+# recess from the underside, LEAD_CONE_BASE_DIAMETER_MM wide at the
+# underside narrowing to LEAD_CONE_TOP_DIAMETER_MM, reaching to
+# PLATE_SKIN_MM below the top face: two 0.2 mm print layers, since the
+# recesses showed through a single one.
 CORNER_OVERHANG_MM = 0.35
 LEAD_DRILL_MAX_DIAMETER_MM = 1.5
 LEAD_CONE_BASE_DIAMETER_MM = 2.5
 LEAD_CONE_TOP_DIAMETER_MM = 1.0
 PLATE_SKIN_MM = 0.4
+
+# The nice!view display (NICE_VIEW_NAME, NICE_NICEVIEW package) is not
+# fitted for now, so the five drills of its header, at
+# NICE_VIEW_PAD_POSITIONS_MM in footprint coordinates, get no lead
+# recess. The right half's DS2 uses the same five drills.
+NICE_VIEW_NAME = "DS1"
+NICE_VIEW_PAD_POSITIONS_MM = [(0.0, offset) for offset in (5.08, 2.54, 0.0, -2.54, -5.08)]
+NICE_VIEW_DRILL_TOLERANCE_MM = 0.01
 
 # The reset switch in that corner is an E-Switch TL3315 style micro
 # tactile switch, 4.5 x 4.5 x 0.55 mm, pressed with a SIM ejector pin
@@ -491,6 +500,27 @@ def extend_corner(plate, outline_wire, tab_y_range):
 
 def inside_any(compound, point):
     return any(solid.isInside(point, 1e-6, True) for solid in compound.Solids)
+
+
+def without_nice_view_drills(lead_centers):
+    """The lead drills minus the nice!view header's. Every header pad
+    must have its drill among them."""
+    display = placement_by_name(NICE_VIEW_NAME)
+    pads = [display.map_point(App.Vector(x, y, 0.0)) for x, y in NICE_VIEW_PAD_POSITIONS_MM]
+
+    def is_on_pad(center, pad):
+        return math.hypot(center.x - pad.x, center.y - pad.y) <= NICE_VIEW_DRILL_TOLERANCE_MM
+
+    missing = [pad for pad in pads if not any(is_on_pad(center, pad) for center in lead_centers)]
+    if missing:
+        raise SystemExit(
+            f"error: no lead drill at {len(missing)} of {NICE_VIEW_NAME}'s "
+            f"{len(pads)} header pads"
+        )
+    return [
+        center for center in lead_centers
+        if not any(is_on_pad(center, pad) for pad in pads)
+    ]
 
 
 def cut_lead_cones(plate, lead_centers):
@@ -1129,6 +1159,7 @@ def main():
     ]
     if not lead_centers:
         raise SystemExit("error: no lead drills found in the corner extension")
+    lead_centers = without_nice_view_drills(lead_centers)
     plate, cone_height = cut_lead_cones(plate, lead_centers)
     if arguments.right:
         right_reset_name = right_half_reset_switch(placement_by_name(RESET_SWITCH_NAME))
@@ -1187,7 +1218,8 @@ def main():
     print(f"cones:      {len(lead_centers)} lead recesses in the corner, "
           f"{LEAD_CONE_BASE_DIAMETER_MM} mm at the underside narrowing to "
           f"{LEAD_CONE_TOP_DIAMETER_MM} mm, {cone_height:.2f} mm tall, "
-          f"{PLATE_SKIN_MM} mm of plate left above them")
+          f"{PLATE_SKIN_MM} mm of plate left above them, none for the "
+          f"{len(NICE_VIEW_PAD_POSITIONS_MM)} drills of the nice!view header")
     reset_note = ""
     if arguments.right:
         reset_note = f", where the right half has {right_reset_name}"
