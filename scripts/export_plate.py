@@ -166,7 +166,7 @@ RESET_SWITCH_NAME = "S3"
 # The board level switches (reset and power), among which the right
 # half's reset switch is found: the flipped one at S3's position.
 BOARD_SWITCH_NAME_PATTERN = re.compile(r"S[0-9]")
-RESET_PIN_HOLE_DIAMETER_MM = 1.5
+RESET_PIN_HOLE_DIAMETER_MM = 3.0
 RESET_FOOTPRINT_HALF_EXTENTS_MM = (2.575, 2.30)  # pads and body, along footprint x and y
 RESET_POCKET_MARGIN_MM = 0.5
 RESET_POCKET_DEPTH_MM = 1.0
