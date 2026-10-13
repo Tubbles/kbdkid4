@@ -135,12 +135,13 @@ MCU_TAB_EXTENSION_MM = 2.5
 # mounting drill); each gets a frustum recess from the underside,
 # LEAD_CONE_BASE_DIAMETER_MM wide at the underside narrowing to
 # LEAD_CONE_TOP_DIAMETER_MM, reaching to PLATE_SKIN_MM below the top
-# face.
+# face: two 0.2 mm print layers, since the recesses showed through a
+# single one.
 CORNER_OVERHANG_MM = 0.35
 LEAD_DRILL_MAX_DIAMETER_MM = 1.5
 LEAD_CONE_BASE_DIAMETER_MM = 2.5
 LEAD_CONE_TOP_DIAMETER_MM = 1.0
-PLATE_SKIN_MM = 0.2
+PLATE_SKIN_MM = 0.4
 
 # The reset switch in that corner is an E-Switch TL3315 style micro
 # tactile switch, 4.5 x 4.5 x 0.55 mm, pressed with a SIM ejector pin
@@ -170,11 +171,11 @@ RESET_POCKET_DEPTH_MM = 1.0
 # along the body axis, the body is DIODE_BODY_WIDTH_MM wide across it.
 # The pit clears both by DIODE_PIT_MARGIN_MM per side (solder fillets,
 # print swelling). It is DIODE_PIT_DEPTH_MM deep, leaving three 0.2 mm
-# print layers of the 2.2 mm plate over it: a single layer
-# (PLATE_SKIN_MM, as over the lead recesses) printed translucent over a
-# pit this wide. The right half is the same board turned over and its
-# plate is the left one mirrored, so a flipped key switch and a flipped
-# diode must sit at exactly the covered ones' positions there.
+# print layers of the 2.2 mm plate over it: a single layer printed
+# translucent over a pit this wide. The right half is the same board
+# turned over and its plate is the left one mirrored, so a flipped key
+# switch and a flipped diode must sit at exactly the covered ones'
+# positions there.
 COVERED_SWITCH_NAME = "S123"  # third key from the left in the bottom row
 COVERED_DIODE_NAME = "D123"
 DIODE_NAME_PATTERN = re.compile(r"D[0-9]{3}")  # this project's key diodes
