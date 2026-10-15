@@ -1,8 +1,8 @@
 """Shared helpers for this repo's headless FreeCAD scripts.
 
 Locating the PCB body and its mounting drills inside a LibrePCB STEP
-export, plus the scaffolding that makes freecadcmd usable as a script
-interpreter. Unlike the export scripts this module has no entry point,
+export, STL export with a check that the written mesh is closed, plus
+the scaffolding that makes freecadcmd usable as a script interpreter. Unlike the export scripts this module has no entry point,
 so it is safe to import from probes and other scripts.
 
 The scaffolding exists because freecadcmd (observed on 1.0.0) executes
@@ -22,6 +22,7 @@ import traceback
 
 import FreeCAD as App
 import Import
+import Mesh
 import MeshPart
 import Part
 
@@ -370,6 +371,29 @@ def export_stl(shape, stl_file):
     )
     mesh.write(stl_file)
     return mesh
+
+
+def check_closed_mesh(stl_file):
+    """Fail on an STL that is not one closed, manifold shell free of
+    self-intersections, read back from the file itself since STL
+    stores single precision coordinates. Remove a failing file: it
+    must never be left behind as if it were fine."""
+    mesh = Mesh.Mesh(stl_file)
+    problems = []
+    if not mesh.isSolid():
+        problems.append("not closed")
+    if mesh.hasNonManifolds():
+        problems.append("non-manifold")
+    components = mesh.countComponents()
+    if components != 1:
+        problems.append(f"{components} separate components")
+    if mesh.hasSelfIntersections():
+        problems.append("self-intersecting")
+    if problems:
+        os.remove(stl_file)
+        raise SystemExit(
+            f"error: the mesh is {', '.join(problems)}, removed {stl_file}"
+        )
 
 
 def run_and_exit(main_function):

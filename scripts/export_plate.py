@@ -80,10 +80,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import FreeCAD as App
-import Mesh
 import Part
 
 from board_step import (
+    check_closed_mesh,
     component_placements,
     component_positions,
     drill_centers,
@@ -1105,29 +1105,6 @@ def fuse_into_one_solid(plate):
             f"to {fused.Volume:.4f} mm3; a solid was lost or two overlapped"
         )
     return fused.Solids[0]
-
-
-def check_closed_mesh(stl_file):
-    """Fail on an STL that is not one closed, manifold shell free of
-    self-intersections, read back from the file itself since STL
-    stores single precision coordinates. Remove a failing file: it
-    must never be left behind as if it were fine."""
-    mesh = Mesh.Mesh(stl_file)
-    problems = []
-    if not mesh.isSolid():
-        problems.append("not closed")
-    if mesh.hasNonManifolds():
-        problems.append("non-manifold")
-    components = mesh.countComponents()
-    if components != 1:
-        problems.append(f"{components} separate components")
-    if mesh.hasSelfIntersections():
-        problems.append("self-intersecting")
-    if problems:
-        os.remove(stl_file)
-        raise SystemExit(
-            f"error: the plate mesh is {', '.join(problems)}, removed {stl_file}"
-        )
 
 
 def main():
