@@ -31,6 +31,15 @@ CI exports both halves as the `tray-stl` artifact: `_Tray_Left.stl` as described
 
 CI uploads both halves as the `pcb-stl` artifact: `_Pcb_Left.stl`, and `_Pcb_Right.stl` mirrored across the board's center line (the word `right`). A bare board turned over would be its own mirror image, but a print is not: its bed side and its top side come out with different surfaces.
 
+## 3D printed solder spool axle
+
+`scripts/export_spool_axle.py` exports a workshop accessory unrelated to the keyboard: the axle of a solder spool holder, which a cradle holds by a stub on each end while the spool hangs on it by its bore. The body is 19 mm across and 39.5 mm long, the stubs 7.9 mm across and 2.6 mm long. The spools it is for have a rim about 2 mm wide and 2 mm high inside the bore at one face, which keeps them from lying flat on a plain cylinder, so the body has a 2.6 mm wide, 2.4 mm deep groove under that rim, placed for a 27 mm long spool centered on the body. Turn the axle over for a spool put on the other way round.
+
+    docker run --rm -v "$PWD":/work -w /work freecad-headless \
+        freecadcmd scripts/export_spool_axle.py --pass axle.stl
+
+CI uploads it as the `spool-stl` artifact: `Solder_Spool_Axle.stl`.
+
 ## License
 
 See [LICENSE.txt](LICENSE.txt).
