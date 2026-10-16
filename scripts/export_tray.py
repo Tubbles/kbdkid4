@@ -116,8 +116,8 @@ leave less than STANDOFF_RELIEF_MINIMUM_WALL_MM of plastic around the
 insert bore is refused.
 
 The design values live in the constants right below this docstring
-and in tray_shape.py, which holds what the coming case export shares
-with the tray; everything else derives from them.
+and in tray_shape.py, which holds what export_case.py shares with
+the tray; everything else derives from them.
 """
 
 import math
@@ -135,7 +135,6 @@ from board_step import (
     MOUNTING_HOLE_DIAMETER_MM,
     component_placements,
     component_positions,
-    deduplicate_shapes,
     export_stl,
     find_board,
     import_assembly,
@@ -144,7 +143,6 @@ from board_step import (
     pick_resting_face,
     run_and_exit,
     script_arguments,
-    shapes_with_solids,
 )
 from tray_shape import (
     DEFAULT_DEPTH_MM,
@@ -155,6 +153,7 @@ from tray_shape import (
     MCU_NAME,
     POWER_SWITCH_NAME,
     WINDOW_MARGIN_MM,
+    component_protrusions,
     fillet_prism_corners,
     nano_socket_height_for_half,
     nearest_outline_segment,
@@ -163,9 +162,11 @@ from tray_shape import (
     switch_window_center_and_direction,
     switch_window_height_band,
     tray_corner_radius,
+    tray_opens_toward_positive_axis,
     usb_connector_end,
     usb_window_center_and_direction,
     usb_window_height_band,
+    wall_outward,
 )
 
 # Tray design parameters, all in mm, besides the dimensions in
@@ -405,32 +406,6 @@ def parse_arguments(argument_list):
         raise SystemExit(USAGE)
     arguments.step_file, arguments.stl_file = positionals
     return arguments
-
-
-def component_protrusions(document, board_shape, axis):
-    """How far bodies other than the board stick out past the board,
-    along +axis and -axis, in mm."""
-    board_box = board_shape.BoundBox
-    board_low, board_high = projected_interval(board_box, axis)
-    above = 0.0
-    below = 0.0
-    for _label, shape in deduplicate_shapes(shapes_with_solids(document)):
-        low, high = projected_interval(shape.BoundBox, axis)
-        above = max(above, high - board_high)
-        below = max(below, board_low - low)
-    return above, below
-
-
-def projected_interval(bound_box, axis):
-    """The [min, max] interval covered by a bounding box when projected
-    onto an axis."""
-    values = [
-        axis.dot(App.Vector(x, y, z))
-        for x in (bound_box.XMin, bound_box.XMax)
-        for y in (bound_box.YMin, bound_box.YMax)
-        for z in (bound_box.ZMin, bound_box.ZMax)
-    ]
-    return min(values), max(values)
 
 
 def add_standoffs(
@@ -863,19 +838,6 @@ def turn_for_printing(tray, up, floor, depth):
     return tray
 
 
-def wall_outward(outline_wire, center_on_edge, direction, up):
-    """The horizontal direction pointing out of the board at a point on
-    the outline, perpendicular to the wall direction there: the side of
-    the segment on which a point just off the outline lies outside the
-    board (the bounding box center would mislead on the short risers of
-    a stepped edge)."""
-    outward = direction.cross(up)
-    probe = center_on_edge.add(outward * 0.05)
-    if Part.Face(outline_wire).isInside(probe, 1e-6, True):
-        outward = outward.negative()
-    return outward
-
-
 def relieve_ledge(
     tray, cavity_prism, segments, outline_wire, up, corners, reach, label,
     ledge_top, gap, wall, ledge_width, clearance, margin,
@@ -1166,15 +1128,10 @@ def main():
 
     axis = outline_face_pair[0].Surface.Axis
     above, below = component_protrusions(document, board_shape, axis)
-    if abs(above - below) < 0.01:
-        # Symmetric protrusion (e.g. THT bodies vs. lead stubs): fall back
-        # to the convention that the cavity opens upward.
-        open_toward_positive_axis = axis.z >= 0
-    else:
-        open_toward_positive_axis = above > below
+    open_toward_positive_axis = tray_opens_toward_positive_axis(
+        above, below, axis, arguments.right
+    )
     if arguments.flip:
-        open_toward_positive_axis = not open_toward_positive_axis
-    if arguments.right:
         open_toward_positive_axis = not open_toward_positive_axis
     resting_face, up = pick_resting_face(
         outline_face_pair, open_toward_positive_axis

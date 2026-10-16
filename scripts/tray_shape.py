@@ -1,12 +1,14 @@
 """The tray's shape, as far as parts built around it need to know it.
 
-The outline helpers the tray's walls are built from (sharp-corner
-rebuild, uniform corner fillets), the corner radius those walls get,
-the tray's dimension defaults, and where the power switch and USB
-windows open in its wall: the point on the outline and the direction
-along the wall, and the height band above the floor. export_tray.py
-builds the tray from these, and the coming case export shares them so
-its shells follow the tray's outside and line up with its windows.
+Which way the tray opens, the outline helpers its walls are built
+from (sharp-corner rebuild, uniform corner fillets), the corner
+radius those walls get, the tray's dimension defaults, and where the
+power switch and USB
+windows open in its wall: the point on the outline, the directions
+along the wall and out of it, and the height band above the floor.
+export_tray.py builds the tray from these, and export_case.py shares
+them so the case's shells follow the tray's outside and line up with
+its windows.
 Like board_step.py this module has no entry point, so it is safe to
 import from the export scripts and probes.
 """
@@ -15,6 +17,8 @@ import math
 
 import FreeCAD as App
 import Part
+
+from board_step import deduplicate_shapes, shapes_with_solids
 
 # The tray's dimensions, all in mm: export_tray.py's defaults, which
 # it overrides per run with key=value command line words. The corner
@@ -78,6 +82,48 @@ USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM = 0.25
 CORNER_FIT_SAFETY = 0.95  # margin on the largest corner radius that fits
 MINIMUM_FILLET_RADIUS_MM = 0.01  # below this a fillet is skipped as moot
 SHARPEN_MAX_CORNER_RADIUS_MM = 3.0  # outline arcs above this are not corners
+
+
+def tray_opens_toward_positive_axis(above, below, axis, right):
+    """Whether a half's tray opens toward +axis, the board outline
+    face's normal, given how far components protrude past the board
+    along +axis (`above`) and -axis (`below`): toward the side where
+    they protrude the furthest, so the bare(r) side rests on the floor.
+    With symmetric protrusion (THT bodies against lead stubs, or a
+    bare-board STEP) it falls back to the convention that the cavity
+    opens upward. The right half (`right` true) is built with the
+    board's other side up, so its tray opens the other way."""
+    if abs(above - below) < 0.01:
+        toward_positive = axis.z >= 0
+    else:
+        toward_positive = above > below
+    return toward_positive != right
+
+
+def component_protrusions(document, board_shape, axis):
+    """How far bodies other than the board stick out past the board,
+    along +axis and -axis, in mm."""
+    board_box = board_shape.BoundBox
+    board_low, board_high = projected_interval(board_box, axis)
+    above = 0.0
+    below = 0.0
+    for _label, shape in deduplicate_shapes(shapes_with_solids(document)):
+        low, high = projected_interval(shape.BoundBox, axis)
+        above = max(above, high - board_high)
+        below = max(below, board_low - low)
+    return above, below
+
+
+def projected_interval(bound_box, axis):
+    """The [min, max] interval covered by a bounding box when projected
+    onto an axis."""
+    values = [
+        axis.dot(App.Vector(x, y, z))
+        for x in (bound_box.XMin, bound_box.XMax)
+        for y in (bound_box.YMin, bound_box.YMax)
+        for z in (bound_box.ZMin, bound_box.ZMax)
+    ]
+    return min(values), max(values)
 
 
 def outline_straight_segments(outline_wire):
@@ -265,6 +311,19 @@ def nearest_outline_segment(segments, position):
         if best is None or distance < best[0]:
             best = (distance, index, closest, direction)
     return best[1], best[2], best[3]
+
+
+def wall_outward(outline_wire, center_on_edge, direction, up):
+    """The horizontal direction pointing out of the board at a point on
+    the outline, perpendicular to the wall direction there: the side of
+    the segment on which a point just off the outline lies outside the
+    board (the bounding box center would mislead on the short risers of
+    a stepped edge)."""
+    outward = direction.cross(up)
+    probe = center_on_edge.add(outward * 0.05)
+    if Part.Face(outline_wire).isInside(probe, 1e-6, True):
+        outward = outward.negative()
+    return outward
 
 
 def switch_window_center_and_direction(segments, switch_position):

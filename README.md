@@ -31,6 +31,23 @@ CI exports both halves as the `tray-stl` artifact: `_Tray_Left.stl` as described
 
 CI uploads both halves as the `pcb-stl` artifact: `_Pcb_Left.stl`, and `_Pcb_Right.stl` mirrored across the board's center line (the word `right`). A bare board turned over would be its own mirror image, but a print is not: its bed side and its top side come out with different surfaces.
 
+## 3D printed carrying case
+
+`scripts/export_case.py` exports a carrying case for both halves, in two shells that close around them: the halves lie sole to sole with their keys facing outward, each in its own shell, and the shells meet where the soles touch. Each half goes into its shell keys first, in its tray: the tray sits in a pocket 0.3 mm larger per side than the tray's outside, and its rim rests on a step at the bottom of that pocket, so the keycaps keep 1 mm from the floor's padding and no key is held down. The wall by the USB port has a notch over each of the tray's windows, one for the power switch and one wide enough for a USB plug, so both halves can be switched and charged with the case closed. The closed case measures 142.4 x 90.4 x 56 mm.
+
+Magnets hold the shells together, with a Velcro band as a backup. To finish the case, buy and fit:
+
+- Eight 5 x 3 mm disc magnets, four per shell, glued into the pockets in the face where the shells meet. Glue all of one shell's magnets with the same pole facing out and all of the other shell's with the other pole out, so the shells attract. The pockets are 0.3 mm deeper than the magnets, which leaves room for the glue and keeps the magnets below the face, so they never hold the shells apart.
+- A 10 mm wide, 2 mm thick Velcro band, around the closed case the short way: through the tunnel in each long wall of both shells, and across the outside of both floors.
+- 1 mm thick padding glued onto each shell's floor, inside. The walls and the step get none.
+
+The case assumes a 1.0 mm rubber sole glued under each tray, a half 24 mm tall from the underside of its sole to the top of its keycaps, and a USB plug whose grip (the part you hold) measures 13 x 7 mm. If yours differ, change `SOLE_THICKNESS_MM`, `KEY_HEIGHT_MM`, `USB_PLUG_GRIP_WIDTH_MM` or `USB_PLUG_GRIP_HEIGHT_MM` in the constants at the top of the script. The tray's own dimensions come from `scripts/tray_shape.py`.
+
+    docker run --rm -v "$PWD":/work -w /work freecad-headless \
+        freecadcmd scripts/export_case.py --pass output/v1/kbdkid4_v1.step case.stl [right]
+
+Without `right` it exports the left half's shell, with `right` the right half's. Both come out floor down and opening up, so they print without supports. CI uploads both as the `case-stl` artifact: `_Case_Left.stl` and `_Case_Right.stl`.
+
 ## 3D printed solder spool axle
 
 `scripts/export_spool_axle.py` exports a workshop accessory unrelated to the keyboard: the axle of a solder spool holder, which a cradle holds by a stub on each end while the spool hangs on it by its bore. The body is 19 mm across and 39.5 mm long, the stubs 7.9 mm across and 2.6 mm long. The spools it is for have a rim about 2 mm wide and 2 mm high inside the bore at one face, which keeps them from lying flat on a plain cylinder, so the body has a 2.6 mm wide, 2.4 mm deep groove under that rim, placed for a 27 mm long spool centered on the body. Turn the axle over for a spool put on the other way round.
