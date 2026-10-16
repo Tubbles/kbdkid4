@@ -10,7 +10,8 @@ option parser intercepts dash-prefixed arguments even after "--pass"
         [key=value ...] [flip] [right]
 
 The key=value parameter names and their defaults are listed in the
-USAGE text and the constants block below.
+USAGE text and the constants block below (gap, wall, floor, depth and
+standoff height in tray_shape.py).
 
 The board is located inside the STEP assembly without any hardcoded face
 indices, in two stages:
@@ -78,9 +79,10 @@ how much taller its nano's sockets are. The ledge behind the wall is
 cut away over the same stretch. The switch and the microcontroller are
 located via the board sources, since the STEP carries no component
 bodies. The switch's reach below the board comes from its package 3D
-model, the nano's from measurements (see the constants). The switch
-body is wider than its window and comes close to the wall, so around
-that window the wall's inner face gets a pocket over the body's width,
+model, the nano's from measurements (see the constants here and in
+tray_shape.py, which also locates both windows). The switch body is
+wider than its window and comes close to the wall, so around that
+window the wall's inner face gets a pocket over the body's width,
 leaving a thin outer skin. The nano behind the USB window gets ledge
 reliefs (below).
 
@@ -113,8 +115,9 @@ down to the body's reach plus that clearance. A flat that would
 leave less than STANDOFF_RELIEF_MINIMUM_WALL_MM of plastic around the
 insert bore is refused.
 
-The design values live in the constants right below this docstring;
-everything else derives from them.
+The design values live in the constants right below this docstring
+and in tray_shape.py, which holds what the coming case export shares
+with the tray; everything else derives from them.
 """
 
 import math
@@ -143,92 +146,76 @@ from board_step import (
     script_arguments,
     shapes_with_solids,
 )
+from tray_shape import (
+    DEFAULT_DEPTH_MM,
+    DEFAULT_FLOOR_MM,
+    DEFAULT_GAP_MM,
+    DEFAULT_STANDOFF_HEIGHT_MM,
+    DEFAULT_WALL_MM,
+    MCU_NAME,
+    POWER_SWITCH_NAME,
+    WINDOW_MARGIN_MM,
+    fillet_prism_corners,
+    nano_socket_height_for_half,
+    nearest_outline_segment,
+    outline_straight_segments,
+    sharpen_outline,
+    switch_window_center_and_direction,
+    switch_window_height_band,
+    tray_corner_radius,
+    usb_connector_end,
+    usb_window_center_and_direction,
+    usb_window_height_band,
+)
 
-# Tray design parameters, all in mm. Overridable per run with key=value
-# command line words; the corner radii derive from gap and wall.
-DEFAULT_GAP_MM = 0.4  # clearance between PCB edge and cavity wall
-DEFAULT_WALL_MM = 0.8  # wall thickness (two nozzle widths)
-DEFAULT_FLOOR_MM = 1.2  # floor thickness
-DEFAULT_DEPTH_MM = 11.9  # cavity depth, floor top to rim (overall height = depth + floor)
-DEFAULT_STANDOFF_HEIGHT_MM = 8.0  # insert standoff height above the floor
+# Tray design parameters, all in mm, besides the dimensions in
+# tray_shape.py. Overridable per run with key=value command line words
+# like those.
 DEFAULT_STANDOFF_DIAMETER_MM = 5.8  # insert standoff outer diameter
 DEFAULT_STANDOFF_HOLE_DIAMETER_MM = 3.2  # bore for an M2 heat-set insert
 DEFAULT_LEDGE_WIDTH_MM = 1.0  # PCB support ledge from the cavity wall (0 disables)
 
-# The battery switch sits on the board's underside with its lever
-# reaching through the wall, so the wall gets a window over the
-# outline segment nearest the switch, from just below the switch body
-# to just above the board's underside. The switch position comes from
-# the board sources (the STEP carries no component bodies); its shape
-# was measured on the package's 3D model as LibrePCB places it: body
-# 7.7 mm wide, hanging 1.4 mm below the board and reaching to 0.09 mm
-# inside the outline, lever 1.3 mm wide reaching 1.3 mm past the
-# outline. On the assembled first print the body's outer face measured
-# 1.13 mm from the tray's outer face, so 0.07 mm past the board edge
-# and 0.33 mm from the wall's inner face. Only the lever passes through
-# the wall, so the window is sized for its travel: the model shows it
-# 0.1 to 1.4 mm off center at one end, so a sweep of 1.4 mm either
-# side, which a 5.3 mm window clears by 1.25 mm per side. The body
-# gets a pocket in the wall's inner face instead, over its width plus
+# The battery switch window's place along the wall and its height band
+# come from tray_shape.py, with the body's hang below the board. The
+# rest of the switch's shape was measured on the package's 3D model as
+# LibrePCB places it: body 7.7 mm wide, reaching to 0.09 mm inside the
+# outline, lever 1.3 mm wide reaching 1.3 mm past the outline. On the
+# assembled first print the body's outer face measured 1.13 mm from
+# the tray's outer face, so 0.07 mm past the board edge and 0.33 mm
+# from the wall's inner face. Only the lever passes through the wall,
+# so the window is sized for its travel: the model shows it 0.1 to
+# 1.4 mm off center at one end, so a sweep of 1.4 mm either side,
+# which a 5.3 mm window clears by 1.25 mm per side. The body gets a
+# pocket in the wall's inner face instead, over its width plus
 # WINDOW_MARGIN_MM per side and the window's height band, leaving
 # POWER_SWITCH_POCKET_SKIN_MM of the wall outside it (one nozzle
 # width); the pocket also clears the ledge behind it.
-POWER_SWITCH_NAME = "S1"
 POWER_SWITCH_WINDOW_WIDTH_MM = 5.3  # through the wall, clears the lever's travel
 POWER_SWITCH_BODY_WIDTH_MM = 7.7
-POWER_SWITCH_BODY_BELOW_BOARD_MM = 1.4
 POWER_SWITCH_POCKET_SKIN_MM = 0.4
-WINDOW_MARGIN_MM = 0.5  # switch window and pocket edges beyond the body: below, above and per side
 
-# The nice!nano hangs under the board with its USB-C receptacle
-# opening onto the board outline, so the wall gets a second window
-# over the outline segment nearest the connector. The connector end is
-# the far end of the nice!nano package along the footprint's +Y axis,
-# 18.7 mm from the footprint origin (the center of the pin rows).
-# How deep the nano hangs was measured on the real parts (user,
-# 2026-10-12), since the package model gets it wrong: the nano is
-# soldered to pins and sits flush on Mill-Max sockets with its
-# component side facing the board, so its PCB starts the sockets'
-# height below the board (2.56 mm on the left half, 4.3 mm on the
-# right, where the model assumes 2.75 mm). Its PCB is 1.6 mm thick
-# (the model has 1.4 mm), and the receptacle's shell sits flush with
-# the nano's underside (the model has it straddling the nano board,
-# 0.78 mm past its underside). So the nano and its connector reach
-# down to the socket height plus 1.6 mm below the board. The shell's
-# 3.16 mm height comes from the model.
-MCU_NAME = "U1"
-MCU_USB_END_OFFSET_MM = 18.7
-LEFT_NANO_SOCKET_HEIGHT_MM = 2.56
-RIGHT_NANO_SOCKET_HEIGHT_MM = 4.30
+# The rest of the nice!nano's measurements on the real parts (user,
+# 2026-10-12), after its socket heights in tray_shape.py: its PCB is
+# 1.6 mm thick (the model has 1.4 mm), and the receptacle's shell sits
+# flush with the nano's underside (the model has it straddling the
+# nano board, 0.78 mm past its underside). So the nano and its
+# connector reach down to the socket height plus 1.6 mm below the
+# board. The shell's 3.16 mm height comes from the model.
 NANO_PCB_THICKNESS_MM = 1.6
 
-# On the soldered left half the receptacle's mouth sits only 0.56 mm
-# behind the wall's outer face, so the wall hugs the connector. The
-# window was measured on that half as the earlier one (14 x 8 mm, sized
-# for a plug's overmold, centered 3.35 mm below the board where the
-# package model puts the receptacle, along the wall at the outline
-# point nearest the connector end) with its top edge pulled in 1.0 mm,
-# its bottom edge 2.5 mm, its end nearer the power switch 2.0 mm and
-# its other end 1.5 mm. Its corners are rounded like the connector's
-# and both faces of the wall are chamfered around it. The right half
-# gets the same window, lowered by how much taller its nano's sockets
-# are (1.74 mm), since its nano is the same part mounted the same way.
-# Its shift away from the switch stays in board coordinates, which
-# assumes the shift's unknown cause follows the board. If it follows
-# the nano instead, it belongs on the other side there (the shell then
-# still clears the window by 0.28 mm).
+# The USB window's width, measured along with its height and its place
+# (see tray_shape.py). Its corners are rounded like the connector's
+# and both faces of the wall are chamfered around it.
 USB_WINDOW_WIDTH_MM = 10.5
-USB_WINDOW_HEIGHT_MM = 4.5
-LEFT_USB_WINDOW_CENTER_BELOW_BOARD_MM = 2.60
-USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM = 0.25
 # The nano's package model has the receptacle shell ("usb4520-03-0-a
 # v1") 8.94 x 3.16 mm at its mouth with a 1.28 mm outer corner radius.
-# The measured chain above puts the left shell 1.00 to 4.16 mm below
-# the board (the right one 2.74 to 5.90 mm), its center 0.02 mm above
-# the window's, so the window clears it by about 0.67 mm above and
-# below. Across, the pull-ins center it with 0.78 mm to spare on each
-# side. A 1.28 + 0.67 = 1.95 mm radius makes the corners concentric
-# with the shell's vertically.
+# The measured chain (above and in tray_shape.py) puts the left shell
+# 1.00 to 4.16 mm below the board (the right one 2.74 to 5.90 mm), its
+# center 0.02 mm above the window's, so the window clears it by about
+# 0.67 mm above and below. Across, the pull-ins (see tray_shape.py)
+# center it with 0.78 mm to spare on each side. A 1.28 + 0.67 =
+# 1.95 mm radius makes the corners concentric with the shell's
+# vertically.
 USB_WINDOW_CORNER_RADIUS_MM = 1.95
 USB_WINDOW_CHAMFER_MM = 0.2  # 45 degrees, on the wall's outer and inner faces
 
@@ -338,11 +325,8 @@ BATTERY_CONNECTOR_BELOW_BOARD_MM = 4.85
 STANDOFF_RELIEF_CLEARANCE_MM = 1.0
 STANDOFF_RELIEF_MINIMUM_WALL_MM = 0.6
 
-# Implementation tuning, rarely worth touching.
-CORNER_FIT_SAFETY = 0.95  # margin on the largest corner radius that fits
-MINIMUM_FILLET_RADIUS_MM = 0.01  # below this a fillet is skipped as moot
+# Implementation tuning, rarely worth touching (more in tray_shape.py).
 CAVITY_CUT_EXTRA_MM = 1.0  # cavity overshoot above the rim for a clean cut
-SHARPEN_MAX_CORNER_RADIUS_MM = 3.0  # outline arcs above this are not corners
 
 
 USAGE = f"""\
@@ -449,165 +433,6 @@ def projected_interval(bound_box, axis):
     return min(values), max(values)
 
 
-def outline_straight_segments(outline_wire):
-    """The outline's straight segments in wire order, as (point,
-    direction) pairs. The small corner arcs between them are dropped;
-    a large arc means the outline has a curved edge this script's
-    uniform-corner rebuild cannot represent, so that is an error."""
-    segments = []
-    for edge in outline_wire.OrderedEdges:
-        curve = edge.Curve
-        if isinstance(curve, Part.Line):
-            start = edge.valueAt(edge.FirstParameter)
-            end = edge.valueAt(edge.LastParameter)
-            segments.append((start, end.sub(start)))
-        elif isinstance(curve, Part.Circle):
-            if curve.Radius > SHARPEN_MAX_CORNER_RADIUS_MM:
-                raise SystemExit(
-                    f"error: outline contains an arc of radius "
-                    f"{curve.Radius:.2f} mm, too large to be treated as a "
-                    "corner round"
-                )
-        else:
-            raise SystemExit(
-                f"error: unsupported outline edge type "
-                f"{type(curve).__name__}"
-            )
-    if len(segments) < 3:
-        raise SystemExit("error: outline has fewer than 3 straight segments")
-    return segments
-
-
-def intersect_in_plane(point_a, direction_a, point_b, direction_b, normal):
-    """Intersection of two lines lying in the plane with the given
-    normal, or None for (near) parallel lines."""
-    denominator = direction_a.cross(direction_b).dot(normal)
-    if abs(denominator) < 1e-9 * direction_a.Length * direction_b.Length:
-        return None
-    parameter = point_b.sub(point_a).cross(direction_b).dot(normal) / denominator
-    return point_a.add(direction_a * parameter)
-
-
-def sharpen_outline(outline_wire, normal):
-    """Rebuild the outline as a sharp-corner polygon: keep the straight
-    segments and extend neighbours to their intersections, dropping the
-    corner rounds the board outline already carries. This is what makes
-    a single uniform corner radius possible later on."""
-    segments = outline_straight_segments(outline_wire)
-    corner_points = []
-    for index, (point_a, direction_a) in enumerate(segments):
-        point_b, direction_b = segments[(index + 1) % len(segments)]
-        corner = intersect_in_plane(
-            point_a, direction_a, point_b, direction_b, normal
-        )
-        if corner is None:
-            raise SystemExit(
-                "error: successive parallel outline segments, cannot "
-                "rebuild a sharp-corner outline"
-            )
-        corner_points.append(corner)
-    return Part.makePolygon(corner_points + [corner_points[0]])
-
-
-def is_vertical_line_edge(edge, up):
-    if not isinstance(edge.Curve, Part.Line):
-        return False
-    direction = edge.valueAt(edge.LastParameter).sub(
-        edge.valueAt(edge.FirstParameter)
-    )
-    if direction.Length < 1e-9:
-        return False
-    return abs(direction.normalize().dot(up)) > 0.999
-
-
-def vertex_key(point):
-    return (round(point.x, 4), round(point.y, 4), round(point.z, 4))
-
-
-def polygon_corner_convexity(polygon_wire, up):
-    """Map each polygon vertex position to whether its corner is convex
-    (material angle below 180 degrees), keyed by vertex_key()."""
-    points = [vertex.Point for vertex in polygon_wire.OrderedVertexes]
-    count = len(points)
-    directions = [
-        points[(index + 1) % count].sub(points[index]).normalize()
-        for index in range(count)
-    ]
-    turns = []
-    for index in range(count):
-        cross = directions[index - 1].cross(directions[index]).dot(up)
-        dot = directions[index - 1].dot(directions[index])
-        turns.append(math.atan2(cross, dot))
-    orientation = 1.0 if sum(turns) > 0 else -1.0
-    return {
-        vertex_key(points[index]): turns[index] * orientation > 0
-        for index in range(count)
-    }
-
-
-def corner_edges(solid, up, convexity_by_vertex, want_convex):
-    """The solid's vertical edges standing on polygon corners of the
-    requested convexity. Seam edges from earlier fillets stand on no
-    polygon corner and are skipped by the position match."""
-    selected = []
-    for edge in solid.Edges:
-        if not is_vertical_line_edge(edge, up):
-            continue
-        for parameter in (edge.FirstParameter, edge.LastParameter):
-            key = vertex_key(edge.valueAt(parameter))
-            if key in convexity_by_vertex:
-                if convexity_by_vertex[key] == want_convex:
-                    selected.append(edge)
-                break
-    return selected
-
-
-def fillet_prism_corners(prism, polygon, up, convex_radius, concave_radius):
-    """Fillet a prism's vertical corner edges, with one radius for the
-    polygon's convex corners and another for its concave ones."""
-    convexity = polygon_corner_convexity(polygon, up)
-    result = prism
-    for want_convex, radius in ((True, convex_radius), (False, concave_radius)):
-        if radius < MINIMUM_FILLET_RADIUS_MM:
-            continue
-        edges = corner_edges(result, up, convexity, want_convex)
-        if edges:
-            result = result.makeFillet(radius, edges)
-    return result
-
-
-def max_uniform_corner_radius(polygon_wire):
-    """Largest fillet radius all corners of a polygon can share.
-
-    A fillet with radius R at a corner with turn angle t consumes
-    R * tan(t / 2) of each adjacent edge, so every edge must be at
-    least as long as the demands of the fillets at its two ends.
-    """
-    points = [vertex.Point for vertex in polygon_wire.OrderedVertexes]
-    count = len(points)
-    directions = []
-    lengths = []
-    for index in range(count):
-        vector = points[(index + 1) % count].sub(points[index])
-        lengths.append(vector.Length)
-        directions.append(vector.normalize())
-    demands = []
-    for index in range(count):
-        cosine = max(-1.0, min(1.0, directions[index - 1].dot(directions[index])))
-        demands.append(math.tan(math.acos(cosine) / 2.0))
-    radius_limit = None
-    for index in range(count):
-        demand_sum = demands[index] + demands[(index + 1) % count]
-        if demand_sum < 1e-9:
-            continue
-        limit = lengths[index] / demand_sum
-        if radius_limit is None or limit < radius_limit:
-            radius_limit = limit
-    if radius_limit is None:
-        raise SystemExit("error: outline polygon has no corners to fillet")
-    return radius_limit
-
-
 def add_standoffs(
     tray, hole_centers, up, floor, standoff_height, standoff_diameter,
     standoff_hole_diameter,
@@ -661,21 +486,6 @@ def add_standoffs(
             f"{expected_volume:.1f} mm3; geometry is off"
         )
     return result
-
-
-def nearest_outline_segment(segments, position):
-    """(index, closest point on segment, direction) of the outline
-    segment nearest a position."""
-    best = None
-    for index, (start, vector) in enumerate(segments):
-        length = vector.Length
-        direction = App.Vector(vector).normalize()
-        along = max(0.0, min(length, direction.dot(position.sub(start))))
-        closest = start.add(direction * along)
-        distance = position.sub(closest).Length
-        if best is None or distance < best[0]:
-            best = (distance, index, closest, direction)
-    return best[1], best[2], best[3]
 
 
 def cut_wall_window(
@@ -914,24 +724,6 @@ def validate_rounded_window(
                         f"error: the {label} window's corners are not rounded "
                         f"with {corner_radius} mm"
                     )
-
-
-def usb_window_center_away_from_switch(
-    usb_outline_point, usb_direction, switch_window_center
-):
-    """The USB window center on the outline: the outline point nearest
-    the connector end moved USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM along
-    the wall, away from the power switch window."""
-    toward_switch = usb_direction.dot(switch_window_center.sub(usb_outline_point))
-    if abs(toward_switch) < 1.0:
-        raise SystemExit(
-            "error: the power switch window is not off to either side of the "
-            "USB window, cannot tell which way is away from it"
-        )
-    switch_side = 1.0 if toward_switch > 0 else -1.0
-    return usb_outline_point.add(
-        usb_direction * (-switch_side * USB_WINDOW_SHIFT_AWAY_FROM_SWITCH_MM)
-    )
 
 
 def cut_ledge_notch(
@@ -1284,11 +1076,7 @@ def build_tray(outline_wire, up, gap, wall, floor, depth, ledge_width, ledge_hei
     sharp_outline = sharpen_outline(outline_wire, up)
     cavity_polygon = offset_outline(sharp_outline, gap)
     outer_wire = offset_outline(sharp_outline, gap + wall)
-    corner_radius = min(
-        gap + wall,
-        math.floor(100.0 * CORNER_FIT_SAFETY * max_uniform_corner_radius(outer_wire))
-        / 100.0,
-    )
+    corner_radius = tray_corner_radius(outer_wire, gap, wall)
 
     outer_wire.translate(up * -floor)
 
@@ -1421,14 +1209,13 @@ def main():
             "board sources"
         )
     segments = outline_straight_segments(resting_face.OuterWire)
-    _switch_index, switch_window_center, switch_direction = nearest_outline_segment(
+    switch_window_center, switch_direction = switch_window_center_and_direction(
         segments, switch_by_name[POWER_SWITCH_NAME]
     )
     board_underside = arguments.standoff_height  # the board rests on the standoffs
-    switch_window_bottom = (
-        board_underside - POWER_SWITCH_BODY_BELOW_BOARD_MM - WINDOW_MARGIN_MM
+    switch_window_bottom, switch_window_top = switch_window_height_band(
+        board_underside
     )
-    switch_window_top = board_underside + WINDOW_MARGIN_MM
     tray = cut_wall_window(
         tray,
         resting_face.OuterWire,
@@ -1464,25 +1251,13 @@ def main():
         raise SystemExit(
             f"error: microcontroller '{MCU_NAME}' not found in the board sources"
         )
-    usb_end = mcu_by_name[MCU_NAME].map_point(
-        App.Vector(0.0, MCU_USB_END_OFFSET_MM, 0.0)
+    usb_end = usb_connector_end(mcu_by_name[MCU_NAME])
+    usb_window_center, usb_direction = usb_window_center_and_direction(
+        segments, usb_end, switch_window_center
     )
-    _usb_index, usb_outline_point, usb_direction = nearest_outline_segment(
-        segments, usb_end
+    usb_window_bottom, usb_window_top = usb_window_height_band(
+        board_underside, arguments.right
     )
-    usb_window_center = usb_window_center_away_from_switch(
-        usb_outline_point, usb_direction, switch_window_center
-    )
-    nano_socket_height = (
-        RIGHT_NANO_SOCKET_HEIGHT_MM if arguments.right else LEFT_NANO_SOCKET_HEIGHT_MM
-    )
-    usb_window_middle = board_underside - (
-        LEFT_USB_WINDOW_CENTER_BELOW_BOARD_MM
-        + nano_socket_height
-        - LEFT_NANO_SOCKET_HEIGHT_MM
-    )
-    usb_window_bottom = usb_window_middle - USB_WINDOW_HEIGHT_MM / 2.0
-    usb_window_top = usb_window_middle + USB_WINDOW_HEIGHT_MM / 2.0
     tray = cut_rounded_wall_window(
         tray,
         resting_face.OuterWire,
@@ -1511,7 +1286,7 @@ def main():
             f"error: battery connector '{battery_connector_name}' not found in the "
             "board sources"
         )
-    nano_reach = nano_socket_height + NANO_PCB_THICKNESS_MM
+    nano_reach = nano_socket_height_for_half(arguments.right) + NANO_PCB_THICKNESS_MM
     bodies = [
         (f"{MCU_NAME} {part}", mcu_by_name[MCU_NAME],
          rectangle_polygon(x_range, y_range), nano_reach)
