@@ -26,6 +26,10 @@ jobs:
     needs: outputs
     steps:
       - uses: actions/checkout@v4
+      - name: Set the short commit hash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: echo "SHORT_SHA=${HEAD_SHA::7}" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           name: librepcb-ci-outputs
@@ -123,4 +127,15 @@ jobs:
         with:
           name: spool-stl
           path: spool/
+          if-no-files-found: error
+      - name: Export camera arm STL
+        run: |
+          mkdir -p camera
+          docker run --rm -v "$PWD":/work -w /work freecad-headless \
+            freecadcmd scripts/export_camera_arm.py --pass camera
+      - name: Upload camera arm STL
+        uses: actions/upload-artifact@v4
+        with:
+          name: kbdkid4-camera-stl-${{ env.SHORT_SHA }}
+          path: camera/
           if-no-files-found: error
