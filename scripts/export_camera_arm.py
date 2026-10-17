@@ -24,6 +24,18 @@ Camera_Case_Front.stl there, each lying on z = 0 the way it prints,
 without support. It also prints the fits, the clearances to the
 printer and what part of the bed the camera sees over the Y travel.
 
+Assembly order: fix the arm to the rail before the case goes on. The
+back shell sits over the M3 bolt's axis, so once the case is on, only
+an L key reaches the bolt, not a straight driver. Thread the bolt
+through the base two or three turns into the T-nut (its M3 nut pressed
+in), set the base on the rail with the T-nut down the outer slot
+lengthwise, then pull the bolt up so the T-nut bears on the lips and
+turn it clockwise: the T-nut turns with it to its stop, then the bolt
+tightens. Loose on the slot's floor the T-nut sits 0.3 mm lower in the
+taper, where neither its corners nor the nut's have room to turn.
+Then close the case around the board and screw it to the arm through
+the ears.
+
 Sources (downloads kept under work/research/camera/):
 
 - Raspberry Pi Camera Module V2.1 mechanical drawing (RPI-CAM-V2_1,
@@ -196,6 +208,7 @@ SOCK_SOCKET_WALL_MM = 1.2
 EAR_CENTERS_U_MM = (-4.8, BOARD_WIDTH_MM + 4.8)
 EAR_RADIUS_MM = 3.6
 EAR_THICKNESS_MM = 3.0
+EAR_SCREW_DRIVER_DIAMETER_MM = 5.0  # the shaft that must pass the front shell's side
 # The arm's bar under the ears: from 4 mm beyond each ear center, 8 mm
 # tall, 7 mm thick, bored for the inserts 5.5 mm deep.
 BAR_REACH_BEYOND_EARS_MM = 4.0
@@ -229,6 +242,7 @@ T_NUT_PLATE_MM = 1.4
 T_NUT_POCKET_DEPTH_MM = M3_NUT_THICKNESS_MM + 0.1
 T_NUT_POCKET_ACROSS_FLATS_MM = M3_NUT_ACROSS_FLATS_MM + 2.0 * PRINT_SWELLING_PER_SIDE_MM
 T_NUT_CHAMFER_START_MM = SLOT_TAPER_START_DEPTH_MM - SLOT_LIP_THICKNESS_MM
+T_NUT_MINIMUM_LIP_OVERLAP_MM = 1.0  # plate bearing on each lip, of its 2.2 mm
 
 # Checks.
 OVERHANG_NORMAL_LIMIT = -0.7072  # a face pointing down more than 45 degrees
@@ -775,6 +789,8 @@ def t_nut_figures():
 def check_t_nut_figures(figures):
     if figures["neck_margin"] <= 0 or figures["turn_margin"] <= 0:
         raise SystemExit("error: the printed T-nut does not pass the slot's neck or turn in it")
+    if figures["lip_overlap"] < T_NUT_MINIMUM_LIP_OVERLAP_MM:
+        raise SystemExit(f"error: the T-nut's plate overlaps each lip by only {figures['lip_overlap']:.2f} mm")
     if figures["thread_engagement"] < 1.5 or figures["bolt_to_slot_bottom"] <= 0:
         raise SystemExit("error: the M3 bolt does not reach through the nut or hits the slot's bottom")
 
@@ -805,6 +821,30 @@ def check_case(case_back, case_front):
         ((hole[0] + 2.0, hole[1], front - 0.5), False),  # counterbore
         ((BOARD_WIDTH_MM / 2.0, 20.0, front - 0.5), True),  # front plate
     ])
+
+
+def check_arm(arm_placed):
+    """Probe the bolt's hole and counterbore and the bar's insert bores
+    on the arm in the printer frame."""
+    bolt_x, bolt_y = BOLT_POSITION_MM
+    hole_wall = M3_CLEARANCE_DIAMETER_MM / 2.0 + 0.4
+    counterbore = M3_HEAD_COUNTERBORE_DIAMETER_MM / 2.0 - 0.4
+    probes = [
+        ((bolt_x, bolt_y, BOLT_HEAD_SEAT_HEIGHT_MM / 2.0), False),  # bolt hole
+        ((bolt_x + hole_wall, bolt_y, BOLT_HEAD_SEAT_HEIGHT_MM / 2.0), True),  # base around it
+        ((bolt_x + counterbore, bolt_y, BOLT_HEAD_SEAT_HEIGHT_MM + 0.5), False),  # counterbore
+        ((bolt_x + counterbore, bolt_y, BOLT_HEAD_SEAT_HEIGHT_MM - 0.5), True),  # head seat
+    ]
+    v = case_outline_center_v()
+    bore_middle = case_back_w() - BAR_INSERT_DEPTH_MM / 2.0
+    bore_wall = INSERT_BORE_DIAMETER_MM / 2.0 + 0.4
+    for center_u in EAR_CENTERS_U_MM:
+        probes += [
+            (case_to_printer((center_u, v, bore_middle)), False),  # insert bore
+            (case_to_printer((center_u, v + bore_wall, bore_middle)), True),  # bar around it
+            (case_to_printer((center_u, v, case_back_w() - BAR_INSERT_DEPTH_MM - 0.5)), True),  # bore floor
+        ]
+    check_probes("the arm", arm_placed, probes)
 
 
 def check_no_overlap(name, first, second):
@@ -943,12 +983,17 @@ def assembled_parts(arm, t_nut, case_back, case_front):
     }
 
 
-def screw_access_cylinders():
-    """The two ear screws' axes from the ears' fronts outward, as wide
-    as a driver around a screw head, in the case frame."""
+def check_ear_screw_access(case_back, case_front_assembled):
+    """A straight driver reaches each ear screw's head from the front:
+    a cylinder EAR_SCREW_DRIVER_DIAMETER_MM across from the ear's front
+    face forward along the screw's axis, past the front shell's side,
+    clear of both shells (case frame)."""
     v = case_outline_center_v()
     start = case_back_w() + EAR_THICKNESS_MM
-    return [cylinder_z((center_u, v), 2.5, (start, start + 60.0)) for center_u in EAR_CENTERS_U_MM]
+    for center_u in EAR_CENTERS_U_MM:
+        driver = cylinder_z((center_u, v), EAR_SCREW_DRIVER_DIAMETER_MM / 2.0, (start, start + 60.0))
+        check_no_overlap("an ear screw's driver and the back shell", driver, case_back)
+        check_no_overlap("an ear screw's driver and the front shell", driver, case_front_assembled)
 
 
 def main():
@@ -970,14 +1015,14 @@ def main():
     front_assembled_in_case.translate(App.Vector(0, 0, FRONT_BOSS_PRESS_MM))
     check_no_overlap("the shells", case_back, front_assembled_in_case)
     check_board_fit(case_back, front_assembled_in_case)
+    check_ear_screw_access(case_back, front_assembled_in_case)
     arm = build_arm()
     check_valid("the arm", arm)
 
     placed = assembled_parts(arm, t_nut, case_back, case_front)
+    check_arm(placed["arm"])
     check_no_overlap("the arm and the back shell", placed["arm"], placed["case_back"])
     check_no_overlap("the arm and the front shell", placed["arm"], placed["case_front"])
-    for access in screw_access_cylinders():
-        check_no_overlap("an ear screw's access and the arm", placed["arm"], access.transformed(case_matrix()))
     assembly = Part.makeCompound(list(placed.values()))
     clearances = {
         name: assembly.distToShape(box_between(*box))[0] for name, box in keep_out_boxes().items()
